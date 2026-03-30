@@ -1,0 +1,60 @@
+{
+  "easy_problems": [
+    "2:1 Multiplexer",
+    "4:1 Multiplexer", 
+    "1:4 Demultiplexer",
+    "4-bit Priority Encoder",
+    "8-bit Comparator",
+    "8-bit Parity Generator",
+    "4-bit Ripple Carry Adder",
+    "Parameterized N-bit Adder",
+    "D Flip-Flop (Sync Reset)",
+    "D Flip-Flop (Async Reset)",
+    "T Flip-Flop",
+    "4-bit Up Counter",
+    "4-bit Up/Down Counter",
+    "Clock Divider (Even Division)",
+    "Rising Edge Detector"
+  ],
+  "medium_problems": [
+    "Sequence Detector (1011 - Mealy)",
+    "Sequence Detector (Moore FSM)",
+    "Traffic Light Controller FSM",
+    "8-bit Shift Register (All Modes)",
+    "Pulse Width Counter",
+    "Debouncer Circuit",
+    "Gray Code Counter",
+    "Binary to Gray Converter",
+    "Gray to Binary Converter",
+    "Synchronous FIFO (Single Clock)",
+    "FIFO with Full/Empty Flags",
+    "Parameterized FIFO",
+    "Round Robin Arbiter (2 masters)",
+    "4-Request Priority Arbiter",
+    "UART Transmitter",
+    "UART Receiver",
+    "UART TX + RX Loopback",
+    "SPI Master (Basic)",
+    "I2C Master (Single Byte Write)",
+    "Simple APB Slave"
+  ],
+  "hard_problems": [
+    "Asynchronous FIFO (Dual Clock)",
+    "FIFO with Almost Full/Empty",
+    "AXI-Lite Slave (Read + Write)",
+    "AXI-Lite Register Bank",
+    "Multi-Clock Domain Synchronizer",
+    "2-Flip-Flop Synchronizer",
+    "Pulse Synchronizer (CDC)",
+    "4x4 Matrix Multiplier (RTL)",
+    "Pipelined Multiplier",
+    "Fixed-Point MAC Unit"
+  ],
+  "very_hard_problems": [
+    "Configurable Packetizer FSM",
+    "UART with Configurable Baud Generator",
+    "Image 3x3 Convolution Engine",
+    "Sobel Edge Detection RTL Block",
+    "Simple RISC-V ALU (Subset)"
+  ]
+}

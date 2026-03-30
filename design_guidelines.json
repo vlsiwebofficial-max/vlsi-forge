@@ -1,0 +1,146 @@
+{
+  "brand_identity": {
+    "name": "VLSI Web",
+    "tagline": "The LeetCode for RTL Design",
+    "tone": "Technical, Precise, Elite, Dark-Mode First",
+    "theme": "dark",
+    "primary_color": "#10B981", 
+    "secondary_color": "#3B82F6",
+    "background_color": "#09090B",
+    "surface_color": "#18181B",
+    "font_heading": "Space Grotesk",
+    "font_body": "Inter",
+    "font_code": "JetBrains Mono"
+  },
+  "typography": {
+    "headings": {
+      "family": "Space Grotesk, sans-serif",
+      "weights": ["600", "700"],
+      "sizes": {
+        "h1": "text-4xl md:text-6xl tracking-tight",
+        "h2": "text-3xl md:text-4xl tracking-tight",
+        "h3": "text-2xl md:text-3xl",
+        "h4": "text-xl md:text-2xl"
+      }
+    },
+    "body": {
+      "family": "Inter, sans-serif",
+      "weights": ["400", "500"],
+      "sizes": {
+        "base": "text-base leading-relaxed",
+        "sm": "text-sm leading-relaxed",
+        "xs": "text-xs"
+      }
+    },
+    "code": {
+      "family": "JetBrains Mono, monospace",
+      "weights": ["400", "500"]
+    }
+  },
+  "colors": {
+    "palette": {
+      "background": "#09090B",
+      "foreground": "#FAFAFA",
+      "card": "#18181B",
+      "card_foreground": "#FAFAFA",
+      "popover": "#18181B",
+      "popover_foreground": "#FAFAFA",
+      "primary": "#10B981",
+      "primary_foreground": "#09090B",
+      "secondary": "#27272A",
+      "secondary_foreground": "#FAFAFA",
+      "muted": "#27272A",
+      "muted_foreground": "#A1A1AA",
+      "accent": "#27272A",
+      "accent_foreground": "#FAFAFA",
+      "destructive": "#EF4444",
+      "destructive_foreground": "#FAFAFA",
+      "border": "#27272A",
+      "input": "#27272A",
+      "ring": "#10B981"
+    },
+    "chart": {
+      "pass": "#10B981",
+      "fail": "#EF4444",
+      "processing": "#3B82F6",
+      "neutral": "#71717A"
+    }
+  },
+  "layout_strategy": {
+    "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+    "section_spacing": "py-16 md:py-24",
+    "grid_system": "grid grid-cols-1 md:grid-cols-12 gap-6",
+    "dashboard_grid": "grid grid-cols-1 md:grid-cols-4 gap-4",
+    "glassmorphism": "bg-background/80 backdrop-blur-sm border border-border/50"
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-4 py-2 font-medium transition-colors",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-md px-4 py-2 font-medium transition-colors",
+      "ghost": "hover:bg-accent hover:text-accent-foreground rounded-md px-4 py-2 font-medium transition-colors",
+      "outline": "border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md px-4 py-2 font-medium transition-colors"
+    },
+    "cards": {
+      "base": "rounded-lg border border-border bg-card text-card-foreground shadow-sm p-6",
+      "interactive": "rounded-lg border border-border bg-card text-card-foreground shadow-sm p-6 hover:border-primary/50 transition-colors cursor-pointer"
+    },
+    "inputs": {
+      "base": "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    }
+  },
+  "visual_enhancers": {
+    "gradients": {
+      "hero": "bg-gradient-to-r from-primary/20 via-background to-background",
+      "glow": "shadow-[0_0_20px_rgba(16,185,129,0.15)]"
+    },
+    "textures": {
+      "grid": "bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]",
+      "dots": "bg-[radial-gradient(#80808012_1px,transparent_1px)] bg-[size:16px_16px]"
+    }
+  },
+  "libraries": {
+    "code_editor": {
+      "name": "@monaco-editor/react",
+      "usage": "Essential for the coding interface. Configure with 'vs-dark' theme and 'verilog' language support."
+    },
+    "waveform": {
+      "name": "wavedrom",
+      "usage": "Use 'wavedrom' or a simple SVG implementation for digital signal visualization if needed. Prioritize VCD download functionality first."
+    },
+    "charts": {
+      "name": "recharts",
+      "usage": "Use for dashboard statistics (submissions, pass rates, difficulty distribution)."
+    },
+    "icons": {
+      "name": "lucide-react",
+      "usage": "Primary icon set. Use for UI elements."
+    },
+    "toast": {
+      "name": "sonner",
+      "usage": "For notifications (compilation success/error, login status)."
+    }
+  },
+  "image_urls": {
+    "hero_background": "https://images.unsplash.com/photo-1680992046626-418f7e910589?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NjZ8MHwxfHNlYXJjaHwyfHxzZXJ2ZXIlMjByb29tJTIwYmx1ZSUyMGxpZ2h0c3xlbnwwfHx8fDE3NzE3NjQ5NzN8MA&ixlib=rb-4.1.0&q=85",
+    "feature_coding": "https://images.pexels.com/photos/1933900/pexels-photo-1933900.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+    "feature_simulation": "https://images.pexels.com/photos/6424589/pexels-photo-6424589.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+    "feature_analytics": "https://images.unsplash.com/photo-1691435828932-911a7801adfb?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NjZ8MHwxfHNlYXJjaHw0fHxzZXJ2ZXIlMjByb29tJTIwYmx1ZSUyMGxpZ2h0c3xlbnwwfHx8fDE3NzE3NjQ5NzN8MA&ixlib=rb-4.1.0&q=85"
+  },
+  "instructions_to_main_agent": [
+    "1. Setup Shadcn UI with the provided color palette (Dark Mode default).",
+    "2. Install '@monaco-editor/react' for the code editor component.",
+    "3. Create a 'ProblemLayout' with a resizable split-pane (using 'react-resizable-panels' or standard CSS flex). Left: Markdown Description, Right: Monaco Editor.",
+    "4. Implement the 'WaveformViewer' as a placeholder or simple SVG renderer if 'wavedrom' is too complex to integrate quickly, but ensure 'Download VCD' button is prominent.",
+    "5. Use 'recharts' for the User Dashboard analytics.",
+    "6. Ensure all API calls are mocked or connected to the FastAPI backend as per the 'problem_statement'.",
+    "7. Authentication pages must be clean, centered cards with glassmorphism effects.",
+    "8. Use 'data-testid' for all interactive elements."
+  ],
+  "universal_guidelines": [
+    "Avoid 'AI slop' aesthetic (generic centered layouts, excessive gradients).",
+    "Use deep, rich dark backgrounds (#09090B) instead of pure black.",
+    "Ensure high contrast for text (WCAG AA).",
+    "Add micro-interactions (hover, focus, active states) to all buttons and inputs.",
+    "Use 'sonner' for all toast notifications."
+  ]
+}

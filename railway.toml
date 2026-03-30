@@ -1,0 +1,23 @@
+# =============================================================================
+# VLSI Forge — Railway Deployment Configuration
+# Place this file in the ROOT of your repository
+# Railway auto-detects it when you connect your GitHub repo
+# =============================================================================
+
+[build]
+# Tell Railway to build the backend Docker image
+dockerfile = "backend/Dockerfile"
+dockerfilePath = "backend/Dockerfile"
+context = "backend"
+
+[deploy]
+# Railway will set PORT automatically — our Dockerfile reads it
+startCommand = "uvicorn server:app --host 0.0.0.0 --port $PORT --workers 2"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+[environments.production]
+[environments.production.deploy]
+numReplicas = 1

