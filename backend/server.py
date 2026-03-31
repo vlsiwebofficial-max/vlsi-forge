@@ -1150,6 +1150,113 @@ async def get_all_submissions(request: Request, skip: int = 0, limit: int = 100)
     return {"submissions": submissions, "total": total, "skip": skip, "limit": limit}
 
 
+# ==================== ONE-TIME SEED ====================
+
+SEED_PROBLEMS = [
+    {
+        "title": "Half Adder",
+        "difficulty": "Easy",
+        "tags": ["combinational", "arithmetic"],
+        "description": "Design a half adder with inputs `a`, `b` and outputs `sum`, `carry`.\n\n**Truth Table:**\n| a | b | sum | carry |\n|---|---|-----|-------|\n| 0 | 0 |  0  |   0   |\n| 0 | 1 |  1  |   0   |\n| 1 | 0 |  1  |   0   |\n| 1 | 1 |  0  |   1   |",
+        "constraints": "- Use only combinational logic\n- No clock or reset required",
+        "starter_code": "module half_adder(\n    input  a,\n    input  b,\n    output sum,\n    output carry\n);\n    // Your code here\nendmodule",
+        "testbench_template": "`timescale 1ns/1ps\nmodule tb_half_adder;\n    reg a, b;\n    wire sum, carry;\n    half_adder dut(.a(a), .b(b), .sum(sum), .carry(carry));\n    initial begin\n        $dumpfile(\"waveform.vcd\");\n        $dumpvars(0, tb_half_adder);\n        {{INPUT}}\n        $finish;\n    end\nendmodule",
+        "testcases": [
+            {"input_data": "a=0; b=0; #10; $display(\"%b %b\", sum, carry);", "expected_output": "0 0", "is_hidden": False},
+            {"input_data": "a=0; b=1; #10; $display(\"%b %b\", sum, carry);", "expected_output": "1 0", "is_hidden": False},
+            {"input_data": "a=1; b=0; #10; $display(\"%b %b\", sum, carry);", "expected_output": "1 0", "is_hidden": False},
+            {"input_data": "a=1; b=1; #10; $display(\"%b %b\", sum, carry);", "expected_output": "0 1", "is_hidden": True},
+        ]
+    },
+    {
+        "title": "2-to-1 Multiplexer",
+        "difficulty": "Easy",
+        "tags": ["combinational", "mux"],
+        "description": "Implement a 2-to-1 multiplexer.\n- When `sel=0`, output `a`\n- When `sel=1`, output `b`",
+        "constraints": "- Single-bit inputs and output",
+        "starter_code": "module mux2to1(\n    input  a,\n    input  b,\n    input  sel,\n    output out\n);\n    // Your code here\nendmodule",
+        "testbench_template": "`timescale 1ns/1ps\nmodule tb_mux2to1;\n    reg a, b, sel;\n    wire out;\n    mux2to1 dut(.a(a), .b(b), .sel(sel), .out(out));\n    initial begin\n        $dumpfile(\"waveform.vcd\");\n        $dumpvars(0, tb_mux2to1);\n        {{INPUT}}\n        $finish;\n    end\nendmodule",
+        "testcases": [
+            {"input_data": "a=1; b=0; sel=0; #10; $display(\"%b\", out);", "expected_output": "1", "is_hidden": False},
+            {"input_data": "a=1; b=0; sel=1; #10; $display(\"%b\", out);", "expected_output": "0", "is_hidden": False},
+            {"input_data": "a=0; b=1; sel=1; #10; $display(\"%b\", out);", "expected_output": "1", "is_hidden": True},
+        ]
+    },
+    {
+        "title": "D Flip-Flop (Sync Reset)",
+        "difficulty": "Medium",
+        "tags": ["sequential", "flip-flop"],
+        "description": "Design a positive-edge-triggered D flip-flop with **synchronous active-high reset**.\n\n- On rising clock edge: if `rst=1`, set `q=0`; else `q=d`",
+        "constraints": "- Synchronous reset only\n- Positive edge triggered",
+        "starter_code": "module dff_sync(\n    input  clk,\n    input  rst,\n    input  d,\n    output reg q\n);\n    // Your code here\nendmodule",
+        "testbench_template": "`timescale 1ns/1ps\nmodule tb_dff_sync;\n    reg clk=0, rst, d;\n    wire q;\n    always #5 clk = ~clk;\n    dff_sync dut(.clk(clk), .rst(rst), .d(d), .q(q));\n    initial begin\n        $dumpfile(\"waveform.vcd\");\n        $dumpvars(0, tb_dff_sync);\n        {{INPUT}}\n        $finish;\n    end\nendmodule",
+        "testcases": [
+            {"input_data": "rst=1; d=1; @(posedge clk); #1; $display(\"%b\", q);", "expected_output": "0", "is_hidden": False},
+            {"input_data": "rst=0; d=1; @(posedge clk); #1; $display(\"%b\", q);", "expected_output": "1", "is_hidden": False},
+            {"input_data": "rst=0; d=0; @(posedge clk); #1; $display(\"%b\", q);", "expected_output": "0", "is_hidden": True},
+        ]
+    },
+]
+
+@api_router.post("/seed")
+async def seed_database(request: Request):
+    """One-time seed endpoint. Protected by SEED_SECRET env var. No-ops if data already exists."""
+    seed_secret = os.environ.get("SEED_SECRET", "")
+    if not seed_secret:
+        raise HTTPException(status_code=403, detail="Seed endpoint disabled")
+    provided = request.headers.get("X-Seed-Secret", "")
+    if provided != seed_secret:
+        raise HTTPException(status_code=403, detail="Invalid seed secret")
+
+    results = []
+
+    # Create admin user if not exists
+    admin_email = "admin@vlsiweb.com"
+    existing_admin = await db.users.find_one({"email": admin_email})
+    if not existing_admin:
+        hashed = bcrypt.hashpw(b"admin123", bcrypt.gensalt()).decode()
+        await db.users.insert_one({
+            "user_id": f"user_{uuid.uuid4().hex[:12]}",
+            "email": admin_email,
+            "name": "Admin",
+            "password_hash": hashed,
+            "role": "admin",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        results.append("created admin user: admin@vlsiweb.com / admin123")
+    else:
+        results.append("admin user already exists")
+
+    # Seed sample problems
+    for prob in SEED_PROBLEMS:
+        existing = await db.problems.find_one({"title": prob["title"]})
+        if not existing:
+            now = datetime.now(timezone.utc).isoformat()
+            testcases = [{"testcase_id": f"tc_{uuid.uuid4().hex[:8]}", **tc} for tc in prob["testcases"]]
+            prob_doc = {k: v for k, v in prob.items() if k != "testcases"}
+            await db.problems.insert_one({
+                "problem_id": f"prob_{uuid.uuid4().hex[:12]}",
+                "testcases": testcases,
+                "created_by": "admin",
+                "created_at": now,
+                "updated_at": now,
+                **prob_doc
+            })
+            results.append(f"seeded problem: {prob['title']}")
+        else:
+            results.append(f"problem already exists: {prob['title']}")
+
+    # Ensure indexes
+    await db.users.create_index("email", unique=True)
+    await db.users.create_index("user_id", unique=True)
+    await db.problems.create_index("problem_id", unique=True)
+    await db.submissions.create_index([("user_id", 1), ("submitted_at", -1)])
+    await db.user_sessions.create_index("session_token")
+    results.append("indexes ensured")
+
+    return {"status": "ok", "results": results}
+
+
 # ==================== HEALTH CHECK ====================
 
 @app.get("/health")
