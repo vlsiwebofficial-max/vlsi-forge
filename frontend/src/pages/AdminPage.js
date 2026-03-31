@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API } from '../App';
 import Navbar from '../components/Navbar';
-import { Users, BookOpen, Send, Shield, Loader2, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { Users, Send, Shield, Loader2, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 
 function StatCard({ icon, label, value }) {
   return (

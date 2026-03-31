@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { API } from '../App';
 import Navbar from '../components/Navbar';
-import { Search, CheckCircle, Circle, ChevronRight } from 'lucide-react';
+import { Search, ChevronRight } from 'lucide-react';
 
 const DIFFICULTIES = ['All', 'Easy', 'Medium', 'Hard'];
 const DIFF_COLORS = { Easy: 'text-[#22C55E] bg-[#22C55E]/10', Medium: 'text-[#F59E0B] bg-[#F59E0B]/10', Hard: 'text-[#EF4444] bg-[#EF4444]/10' };
