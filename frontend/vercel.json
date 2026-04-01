@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "redirects": [
+    { "source": "/", "destination": "/forge", "permanent": false }
+  ],
+  "rewrites": [
+    { "source": "/forge/static/(.*)", "destination": "/static/$1" },
+    { "source": "/forge/(.*)", "destination": "/index.html" },
+    { "source": "/forge", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-XSS-Protection", "value": "1; mode=block" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    },
+    {
+      "source": "/static/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ]
+}
