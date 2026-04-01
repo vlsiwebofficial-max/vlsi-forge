@@ -1,8 +1,5 @@
 {
   "version": 2,
-  "redirects": [
-    { "source": "/", "destination": "/forge", "permanent": false }
-  ],
   "rewrites": [
     { "source": "/forge/static/(.*)", "destination": "/static/$1" },
     { "source": "/forge/(.*)", "destination": "/index.html" },
