@@ -76,7 +76,7 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={{ user, loading, login, logout, register }}>
-      <BrowserRouter basename="/forge">
+      <BrowserRouter>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />

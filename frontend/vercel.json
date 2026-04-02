@@ -1,9 +1,7 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/forge/static/(.*)", "destination": "/static/$1" },
-    { "source": "/forge/(.*)", "destination": "/index.html" },
-    { "source": "/forge", "destination": "/index.html" }
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
     {
