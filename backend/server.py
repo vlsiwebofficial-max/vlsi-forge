@@ -23,6 +23,11 @@ import shutil
 import httpx
 import bcrypt
 import jwt
+import smtplib
+import secrets
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from functools import partial
 from enum import Enum
 
 ROOT_DIR = Path(__file__).parent
@@ -37,6 +42,14 @@ db = client[os.environ['DB_NAME']]
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-secret-key-change-in-production')
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_DAYS = 7
+
+# Email Configuration
+SMTP_HOST = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
+SMTP_PORT = int(os.environ.get('SMTP_PORT', '587'))
+SMTP_USER = os.environ.get('SMTP_USER', '')
+SMTP_PASS = os.environ.get('SMTP_PASS', '')
+FROM_EMAIL = os.environ.get('FROM_EMAIL', SMTP_USER)
+EMAIL_CODE_EXPIRY_MINUTES = 15
 
 # Rate limiter (keyed by IP)
 limiter = Limiter(key_func=get_remote_address)
@@ -100,6 +113,21 @@ class UserSession(BaseModel):
     session_token: str
     expires_at: datetime
     created_at: datetime
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str
+
+class VerifyEmailRequest(BaseModel):
+    email: EmailStr
+    code: str
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
 
 # Problem Models
 class Testcase(BaseModel):
@@ -208,6 +236,15 @@ async def create_indexes():
         await db.user_sessions.create_index(
             "expires_at",
             expireAfterSeconds=0  # MongoDB removes docs when expires_at < now
+        )
+        # TTL indexes for email tokens — auto-delete after expiry
+        await db.email_verification_tokens.create_index("email")
+        await db.email_verification_tokens.create_index(
+            "expires_at", expireAfterSeconds=0
+        )
+        await db.password_reset_tokens.create_index("email")
+        await db.password_reset_tokens.create_index(
+            "expires_at", expireAfterSeconds=0
         )
         logger.info("MongoDB indexes created successfully")
     except Exception as e:
@@ -537,6 +574,62 @@ async def require_admin(request: Request) -> User:
     return user
 
 
+# ==================== EMAIL HELPERS ====================
+
+def _send_email_sync(to_email: str, subject: str, html_body: str) -> bool:
+    """Send an email synchronously (run in thread pool to avoid blocking)."""
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"VLSI Forge <{FROM_EMAIL}>"
+        msg["To"] = to_email
+        msg.attach(MIMEText(html_body, "html"))
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
+        return True
+    except Exception as e:
+        logger.error(f"Email send error: {e}")
+        return False
+
+
+async def send_email(to_email: str, subject: str, html_body: str) -> bool:
+    """Async wrapper — runs SMTP in a thread pool."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        None, partial(_send_email_sync, to_email, subject, html_body)
+    )
+
+
+def verification_email_html(name: str, code: str) -> str:
+    return f"""
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto; background: #0A0E14; color: #E8EDF4; padding: 32px; border-radius: 12px;">
+      <h2 style="color: #4A8FE8; margin-bottom: 8px;">Verify your VLSI Forge account</h2>
+      <p style="color: #7A8FA8;">Hi {name}, thanks for signing up! Use the code below to verify your email address.</p>
+      <div style="background: #13171E; border: 1px solid #1E2530; border-radius: 8px; padding: 24px; text-align: center; margin: 24px 0;">
+        <span style="font-size: 36px; font-weight: bold; letter-spacing: 12px; color: #4A8FE8;">{code}</span>
+      </div>
+      <p style="color: #7A8FA8; font-size: 13px;">This code expires in {EMAIL_CODE_EXPIRY_MINUTES} minutes. If you did not create an account, ignore this email.</p>
+    </div>
+    """
+
+
+def reset_password_email_html(name: str, code: str) -> str:
+    return f"""
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto; background: #0A0E14; color: #E8EDF4; padding: 32px; border-radius: 12px;">
+      <h2 style="color: #4A8FE8; margin-bottom: 8px;">Reset your VLSI Forge password</h2>
+      <p style="color: #7A8FA8;">Hi {name}, we received a request to reset your password. Use the code below.</p>
+      <div style="background: #13171E; border: 1px solid #1E2530; border-radius: 8px; padding: 24px; text-align: center; margin: 24px 0;">
+        <span style="font-size: 36px; font-weight: bold; letter-spacing: 12px; color: #4A8FE8;">{code}</span>
+      </div>
+      <p style="color: #7A8FA8; font-size: 13px;">This code expires in {EMAIL_CODE_EXPIRY_MINUTES} minutes. If you did not request a password reset, ignore this email.</p>
+    </div>
+    """
+
+
 # ==================== AUTH ROUTES ====================
 
 @api_router.post("/auth/register")
@@ -554,35 +647,33 @@ async def register(user_data: UserCreate):
         "name": user_data.name,
         "password_hash": hashed_password.decode(),
         "role": UserRole.USER.value,
+        "email_verified": False,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
 
     await db.users.insert_one(user_doc)
 
-    session_token = f"session_{uuid.uuid4().hex}"
-    session_doc = {
-        "session_id": f"sess_{uuid.uuid4().hex[:12]}",
-        "user_id": user_id,
-        "session_token": session_token,
-        "expires_at": (datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRATION_DAYS)).isoformat(),
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-
-    await db.user_sessions.insert_one(session_doc)
-
-    response = JSONResponse(content={
-        "user_id": user_id,
+    # Generate and store a 6-digit verification code
+    code = str(secrets.randbelow(900000) + 100000)
+    await db.email_verification_tokens.insert_one({
         "email": user_data.email,
-        "name": user_data.name,
-        "role": UserRole.USER.value
+        "code": code,
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=EMAIL_CODE_EXPIRY_MINUTES),
+        "created_at": datetime.now(timezone.utc)
     })
 
-    response.set_cookie(
-        key="session_token", value=session_token,
-        httponly=True, secure=True, samesite="none",
-        max_age=JWT_EXPIRATION_DAYS * 24 * 60 * 60, path="/"
+    # Send verification email (best-effort — don't fail registration if email fails)
+    await send_email(
+        user_data.email,
+        "Verify your VLSI Forge email",
+        verification_email_html(user_data.name, code)
     )
-    return response
+
+    return JSONResponse(content={
+        "requires_verification": True,
+        "email": user_data.email,
+        "message": "Account created. Please check your email for a verification code."
+    })
 
 
 @api_router.post("/auth/login")
@@ -593,6 +684,9 @@ async def login(credentials: UserLogin):
 
     if not bcrypt.checkpw(credentials.password.encode(), user_doc["password_hash"].encode()):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if not user_doc.get("email_verified", True):
+        raise HTTPException(status_code=403, detail="EMAIL_NOT_VERIFIED")
 
     session_token = f"session_{uuid.uuid4().hex}"
     session_doc = {
@@ -693,6 +787,141 @@ async def logout(request: Request, response: Response):
         await db.user_sessions.delete_one({"session_token": session_token})
     response.delete_cookie(key="session_token", path="/")
     return {"message": "Logged out successfully"}
+
+
+@api_router.post("/auth/verify-email")
+async def verify_email(data: VerifyEmailRequest):
+    token_doc = await db.email_verification_tokens.find_one(
+        {"email": data.email, "code": data.code}
+    )
+    if not token_doc:
+        raise HTTPException(status_code=400, detail="Invalid verification code")
+
+    expires_at = token_doc["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Verification code has expired")
+
+    # Mark user as verified
+    await db.users.update_one({"email": data.email}, {"$set": {"email_verified": True}})
+    # Remove used verification tokens for this email
+    await db.email_verification_tokens.delete_many({"email": data.email})
+
+    user_doc = await db.users.find_one({"email": data.email}, {"_id": 0})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Create a session
+    session_token = f"session_{uuid.uuid4().hex}"
+    await db.user_sessions.insert_one({
+        "session_id": f"sess_{uuid.uuid4().hex[:12]}",
+        "user_id": user_doc["user_id"],
+        "session_token": session_token,
+        "expires_at": (datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRATION_DAYS)).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
+    response = JSONResponse(content={
+        "access_token": session_token,
+        "user": {
+            "user_id": user_doc["user_id"],
+            "email": user_doc["email"],
+            "name": user_doc["name"],
+            "role": user_doc["role"]
+        }
+    })
+    response.set_cookie(
+        key="session_token", value=session_token,
+        httponly=True, secure=True, samesite="none",
+        max_age=JWT_EXPIRATION_DAYS * 24 * 60 * 60, path="/"
+    )
+    return response
+
+
+@api_router.post("/auth/resend-verification")
+async def resend_verification(data: ResendVerificationRequest):
+    user_doc = await db.users.find_one({"email": data.email}, {"_id": 0})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="No account found with this email")
+    if user_doc.get("email_verified", False):
+        raise HTTPException(status_code=400, detail="Email is already verified")
+
+    # Delete old codes and create new one
+    await db.email_verification_tokens.delete_many({"email": data.email})
+    code = str(secrets.randbelow(900000) + 100000)
+    await db.email_verification_tokens.insert_one({
+        "email": data.email,
+        "code": code,
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=EMAIL_CODE_EXPIRY_MINUTES),
+        "created_at": datetime.now(timezone.utc)
+    })
+
+    await send_email(
+        data.email,
+        "Verify your VLSI Forge email",
+        verification_email_html(user_doc["name"], code)
+    )
+    return {"message": "Verification code sent"}
+
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest):
+    user_doc = await db.users.find_one({"email": data.email}, {"_id": 0})
+    # Always return 200 to avoid email enumeration
+    if not user_doc:
+        return {"message": "If an account exists, a reset code has been sent"}
+
+    code = str(secrets.randbelow(900000) + 100000)
+    await db.password_reset_tokens.delete_many({"email": data.email})
+    await db.password_reset_tokens.insert_one({
+        "email": data.email,
+        "code": code,
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=EMAIL_CODE_EXPIRY_MINUTES),
+        "created_at": datetime.now(timezone.utc)
+    })
+
+    await send_email(
+        data.email,
+        "Reset your VLSI Forge password",
+        reset_password_email_html(user_doc["name"], code)
+    )
+    return {"message": "If an account exists, a reset code has been sent"}
+
+
+@api_router.post("/auth/reset-password")
+async def reset_password(data: ResetPasswordRequest):
+    if len(data.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    token_doc = await db.password_reset_tokens.find_one(
+        {"email": data.email, "code": data.code}
+    )
+    if not token_doc:
+        raise HTTPException(status_code=400, detail="Invalid reset code")
+
+    expires_at = token_doc["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Reset code has expired")
+
+    hashed_password = bcrypt.hashpw(data.new_password.encode(), bcrypt.gensalt())
+    await db.users.update_one(
+        {"email": data.email},
+        {"$set": {"password_hash": hashed_password.decode()}}
+    )
+    await db.password_reset_tokens.delete_many({"email": data.email})
+    # Invalidate all existing sessions for security
+    user_doc = await db.users.find_one({"email": data.email}, {"_id": 0})
+    if user_doc:
+        await db.user_sessions.delete_many({"user_id": user_doc["user_id"]})
+
+    return {"message": "Password reset successfully. Please sign in."}
 
 
 # ==================== PROBLEM ROUTES ====================

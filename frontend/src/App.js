@@ -9,6 +9,9 @@ import ProblemsPage from './pages/ProblemsPage';
 import ProblemDetailPage from './pages/ProblemDetailPage';
 import SubmissionPage from './pages/SubmissionPage';
 import AdminPage from './pages/AdminPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 
 export const API = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 export const AuthContext = createContext(null);
@@ -39,24 +42,21 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      axios.get(`${API}/api/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` }
-      }).then(res => {
+    // Try to restore session via httpOnly cookie (cross-origin requires withCredentials)
+    axios.get(`${API}/api/auth/me`, { withCredentials: true })
+      .then(res => {
         setUser(res.data);
-      }).catch(() => {
-        localStorage.removeItem('token');
-      }).finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+      })
+      .catch(() => {
+        setUser(null);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const login = async (email, password) => {
-    const res = await axios.post(`${API}/api/auth/login`, { email, password });
-    const { access_token, user: userData } = res.data;
-    localStorage.setItem('token', access_token);
+    const res = await axios.post(`${API}/api/auth/login`, { email, password }, { withCredentials: true });
+    // Backend returns user fields directly (auth via httpOnly cookie)
+    const userData = res.data;
     setUser(userData);
     return userData;
   };
@@ -68,19 +68,24 @@ export default function App() {
 
   const register = async (name, email, password) => {
     const res = await axios.post(`${API}/api/auth/register`, { name, email, password });
-    const { access_token, user: userData } = res.data;
-    localStorage.setItem('token', access_token);
+    // New flow: returns {requires_verification, email} — no session yet
+    return res.data;
+  };
+
+  const setUserFromToken = (userData) => {
     setUser(userData);
-    return userData;
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, register }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, register, setUserFromToken }}>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
           <Route path="/problems" element={<PrivateRoute><ProblemsPage /></PrivateRoute>} />
           <Route path="/problems/:id" element={<PrivateRoute><ProblemDetailPage /></PrivateRoute>} />

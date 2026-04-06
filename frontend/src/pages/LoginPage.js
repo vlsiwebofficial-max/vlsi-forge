@@ -20,7 +20,12 @@ export default function LoginPage() {
       const user = await login(email, password);
       navigate(user.role === 'admin' ? '/admin' : '/dashboard');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Invalid email or password');
+      const detail = err.response?.data?.detail;
+      if (detail === 'EMAIL_NOT_VERIFIED') {
+        navigate('/verify-email', { state: { email } });
+        return;
+      }
+      setError(detail || 'Invalid email or password');
     } finally {
       setLoading(false);
     }
@@ -79,6 +84,12 @@ export default function LoginPage() {
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Link to="/forgot-password" className="text-xs text-[#4A8FE8] hover:underline">
+              Forgot password?
+            </Link>
           </div>
 
           <button

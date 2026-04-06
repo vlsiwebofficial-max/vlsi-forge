@@ -19,8 +19,12 @@ export default function RegisterPage() {
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
     setLoading(true);
     try {
-      await register(name, email, password);
-      navigate('/dashboard');
+      const data = await register(name, email, password);
+      if (data?.requires_verification) {
+        navigate('/verify-email', { state: { email } });
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       setError(err.response?.data?.detail || 'Registration failed. Try again.');
     } finally {
