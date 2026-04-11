@@ -662,12 +662,12 @@ async def register(user_data: UserCreate):
         "created_at": datetime.now(timezone.utc)
     })
 
-    # Send verification email (best-effort — don't fail registration if email fails)
-    await send_email(
+    # Fire-and-forget — don't block the response on SMTP
+    asyncio.create_task(send_email(
         user_data.email,
         "Verify your VLSI Forge email",
         verification_email_html(user_data.name, code)
-    )
+    ))
 
     return JSONResponse(content={
         "requires_verification": True,
@@ -859,11 +859,11 @@ async def resend_verification(data: ResendVerificationRequest):
         "created_at": datetime.now(timezone.utc)
     })
 
-    await send_email(
+    asyncio.create_task(send_email(
         data.email,
         "Verify your VLSI Forge email",
         verification_email_html(user_doc["name"], code)
-    )
+    ))
     return {"message": "Verification code sent"}
 
 
@@ -883,11 +883,11 @@ async def forgot_password(data: ForgotPasswordRequest):
         "created_at": datetime.now(timezone.utc)
     })
 
-    await send_email(
+    asyncio.create_task(send_email(
         data.email,
         "Reset your VLSI Forge password",
         reset_password_email_html(user_doc["name"], code)
-    )
+    ))
     return {"message": "If an account exists, a reset code has been sent"}
 
 
