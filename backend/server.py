@@ -23,11 +23,7 @@ import shutil
 import httpx
 import bcrypt
 import jwt
-import smtplib
 import secrets
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from functools import partial
 from enum import Enum
 
 ROOT_DIR = Path(__file__).parent
@@ -43,12 +39,9 @@ JWT_SECRET = os.environ.get('JWT_SECRET', 'your-secret-key-change-in-production'
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_DAYS = 7
 
-# Email Configuration
-SMTP_HOST = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
-SMTP_PORT = int(os.environ.get('SMTP_PORT', '587'))
-SMTP_USER = os.environ.get('SMTP_USER', '')
-SMTP_PASS = os.environ.get('SMTP_PASS', '')
-FROM_EMAIL = os.environ.get('FROM_EMAIL', SMTP_USER)
+# Email Configuration (Resend API — works on Railway)
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
+FROM_EMAIL = os.environ.get('FROM_EMAIL', 'onboarding@resend.dev')
 EMAIL_CODE_EXPIRY_MINUTES = 15
 
 # Rate limiter (keyed by IP)
@@ -576,32 +569,32 @@ async def require_admin(request: Request) -> User:
 
 # ==================== EMAIL HELPERS ====================
 
-def _send_email_sync(to_email: str, subject: str, html_body: str) -> bool:
-    """Send an email synchronously (run in thread pool to avoid blocking)."""
+async def send_email(to_email: str, subject: str, html_body: str) -> bool:
+    """Send email via Resend HTTP API (works on Railway — no SMTP ports needed)."""
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"VLSI Forge <{FROM_EMAIL}>"
-        msg["To"] = to_email
-        msg.attach(MIMEText(html_body, "html"))
-
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
-        return True
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {RESEND_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "from": f"VLSI Forge <{FROM_EMAIL}>",
+                    "to": [to_email],
+                    "subject": subject,
+                    "html": html_body
+                }
+            )
+        if resp.status_code in (200, 201):
+            logger.info(f"Email sent to {to_email}")
+            return True
+        else:
+            logger.error(f"Resend API error {resp.status_code}: {resp.text}")
+            return False
     except Exception as e:
         logger.error(f"Email send error: {e}")
         return False
-
-
-async def send_email(to_email: str, subject: str, html_body: str) -> bool:
-    """Async wrapper — runs SMTP in a thread pool."""
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(
-        None, partial(_send_email_sync, to_email, subject, html_body)
-    )
 
 
 def verification_email_html(name: str, code: str) -> str:
