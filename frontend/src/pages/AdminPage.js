@@ -29,11 +29,9 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState('users');
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const headers = { Authorization: `Bearer ${token}` };
     Promise.all([
-      axios.get(`${API}/api/admin/users`, { headers }),
-      axios.get(`${API}/api/admin/submissions`, { headers }),
+      axios.get(`${API}/api/admin/users`, { withCredentials: true }),
+      axios.get(`${API}/api/admin/submissions`, { withCredentials: true }),
     ]).then(([usersRes, subsRes]) => {
       setUsers(usersRes.data);
       setSubmissions(subsRes.data);

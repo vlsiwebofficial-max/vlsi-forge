@@ -27,11 +27,9 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const headers = { Authorization: `Bearer ${token}` };
     Promise.all([
-      axios.get(`${API}/api/stats/me`, { headers }),
-      axios.get(`${API}/api/submissions/user/me`, { headers })
+      axios.get(`${API}/api/stats/me`, { withCredentials: true }),
+      axios.get(`${API}/api/submissions/user/me`, { withCredentials: true })
     ]).then(([statsRes, subsRes]) => {
       setStats(statsRes.data);
       setSubmissions(subsRes.data.slice(0, 8));

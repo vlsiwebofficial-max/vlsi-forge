@@ -443,6 +443,9 @@ async def compile_and_simulate_verilog(code: str, testbench: str, language: str 
         except asyncio.TimeoutError:
             return {"success": False, "error": "Compilation timeout (15s limit)", "output": None,
                     "vcd_data": None, "waveform_json": None, "lint_warnings": []}
+        except FileNotFoundError:
+            return {"success": False, "error": "iverilog not found on this server. Please contact support.",
+                    "output": None, "vcd_data": None, "waveform_json": None, "lint_warnings": []}
 
         if rc != 0:
             error_msg = stderr or stdout or "Compilation failed"
@@ -457,6 +460,9 @@ async def compile_and_simulate_verilog(code: str, testbench: str, language: str 
             )
         except asyncio.TimeoutError:
             return {"success": False, "error": "Simulation timeout (10s limit). Check for infinite loops.",
+                    "output": None, "vcd_data": None, "waveform_json": None, "lint_warnings": []}
+        except FileNotFoundError:
+            return {"success": False, "error": "vvp not found on this server. Please contact support.",
                     "output": None, "vcd_data": None, "waveform_json": None, "lint_warnings": []}
 
         logger.info(f"Simulation done (rc={rc}), stdout={len(sim_stdout)} chars")
@@ -1484,6 +1490,49 @@ async def seed_database(request: Request):
 @app.get("/health")
 async def health():
     return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@app.get("/api/debug/test-simulation")
+async def test_simulation():
+    """
+    Test endpoint: runs a known-correct half_adder simulation.
+    Returns detailed diagnostics — useful for verifying the iverilog/vvp pipeline.
+    """
+    import shutil as _shutil
+
+    # Check binaries are findable
+    iverilog_path = _shutil.which("iverilog")
+    vvp_path = _shutil.which("vvp")
+
+    design = """\
+module half_adder(input a, input b, output sum, output carry);
+  assign sum   = a ^ b;
+  assign carry = a & b;
+endmodule
+"""
+    testbench = """\
+module testbench;
+  reg a, b;
+  wire sum, carry;
+  half_adder uut(.a(a), .b(b), .sum(sum), .carry(carry));
+  initial begin
+    $dumpfile("waveform.vcd");
+    $dumpvars(0, testbench);
+    a = 1; b = 1; #5;
+    $display("%b %b", sum, carry);
+    #10 $finish;
+  end
+endmodule
+"""
+    result = await compile_and_simulate_verilog(design, testbench, "verilog")
+    return {
+        "iverilog_path": iverilog_path,
+        "vvp_path": vvp_path,
+        "simulation_success": result["success"],
+        "simulation_output": result.get("output"),
+        "simulation_error": result.get("error"),
+        "has_vcd": result.get("vcd_data") is not None,
+    }
 
 
 # ==================== MIDDLEWARE & ROUTER ====================

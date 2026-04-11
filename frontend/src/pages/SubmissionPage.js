@@ -17,8 +17,7 @@ export default function SubmissionPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    axios.get(`${API}/api/submissions/${id}`, { headers: { Authorization: `Bearer ${token}` } })
+    axios.get(`${API}/api/submissions/${id}`, { withCredentials: true })
       .then(res => setSubmission(res.data))
       .catch(() => {})
       .finally(() => setLoading(false));

@@ -4,52 +4,91 @@ import axios from 'axios';
 import { API } from '../App';
 import Navbar from '../components/Navbar';
 import Editor from '@monaco-editor/react';
-import { Play, ChevronLeft, CheckCircle, XCircle, AlertCircle, Loader2, Download } from 'lucide-react';
+import { Play, ChevronLeft, CheckCircle, XCircle, AlertCircle, Loader2, Download, ChevronDown } from 'lucide-react';
 
 const DIFF_COLORS = { Easy: 'text-[#22C55E] bg-[#22C55E]/10 border-[#22C55E]/25', Medium: 'text-[#F59E0B] bg-[#F59E0B]/10 border-[#F59E0B]/25', Hard: 'text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/25' };
 
-const DEFAULT_CODE = `// Write your Verilog code here
+const LANGUAGES = [
+  { value: 'verilog', label: 'Verilog', monacoLang: 'verilog', disabled: false },
+  { value: 'systemverilog', label: 'SystemVerilog', monacoLang: 'verilog', disabled: false },
+  { value: 'vhdl', label: 'VHDL (soon)', monacoLang: 'vhdl', disabled: true },
+];
+
+const DEFAULT_CODE = {
+  verilog: `// Write your Verilog code here
 module solution(
   // Define your ports
 );
   // Your implementation
-endmodule`;
+endmodule`,
+  systemverilog: `// Write your SystemVerilog code here
+module solution(
+  // Define your ports
+);
+  // Your implementation
+endmodule`,
+  vhdl: `-- Write your VHDL code here
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+entity solution is
+  -- Define your ports
+  port (
+  );
+end solution;
+
+architecture Behavioral of solution is
+begin
+  -- Your implementation
+end Behavioral;`,
+};
 
 export default function ProblemDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [problem, setProblem] = useState(null);
   const [code, setCode] = useState('');
+  const [language, setLanguage] = useState('verilog');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
   const [activeTab, setActiveTab] = useState('description');
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    axios.get(`${API}/api/problems/${id}`, { headers: { Authorization: `Bearer ${token}` } })
+    axios.get(`${API}/api/problems/${id}`, { withCredentials: true })
       .then(res => {
         setProblem(res.data);
-        setCode(res.data.starter_code || DEFAULT_CODE);
+        setCode(res.data.starter_code || DEFAULT_CODE[language]);
       })
       .catch(() => navigate('/problems'))
       .finally(() => setLoading(false));
   }, [id, navigate]);
 
+  // Update default code when language changes (only if user hasn't edited)
+  const handleLanguageChange = (lang) => {
+    setLanguage(lang);
+    setLangMenuOpen(false);
+    // Only set default if code matches any default template
+    const isDefault = Object.values(DEFAULT_CODE).some(d => code.trim() === d.trim());
+    if (isDefault) {
+      setCode(problem?.starter_code || DEFAULT_CODE[lang]);
+    }
+  };
+
   const handleSubmit = async () => {
     setSubmitting(true);
     setResult(null);
     setActiveTab('result');
-    const token = localStorage.getItem('token');
     try {
       const res = await axios.post(`${API}/api/submissions`, {
         problem_id: id,
         code,
-        language: 'verilog'
-      }, { headers: { Authorization: `Bearer ${token}` } });
+        language,
+      }, { withCredentials: true });
       setResult(res.data);
     } catch (err) {
-      setResult({ status: 'error', compilation_error: err.response?.data?.detail || 'Submission failed' });
+      setResult({ status: 'error', compilation_error: err.response?.data?.detail || 'Submission failed. Please try again.' });
     } finally {
       setSubmitting(false);
     }
@@ -179,11 +218,24 @@ export default function ProblemDetailPage() {
                       </div>
                     </div>
 
-                    {/* Compilation error */}
+                    {/* Compilation / Simulation Error */}
                     {result.compilation_error && (
-                      <div>
-                        <div className="text-xs font-semibold text-[#7A8FA8] uppercase tracking-wide mb-2">Compilation Error</div>
-                        <pre className="font-mono text-xs bg-[#1A1F28] border border-[#EF4444]/25 rounded-lg p-3 text-[#EF4444] overflow-x-auto whitespace-pre-wrap">{result.compilation_error}</pre>
+                      <div className="rounded-xl overflow-hidden border border-[#EF4444]/30">
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-[#EF4444]/10 border-b border-[#EF4444]/20">
+                          <div className="flex items-center gap-2 text-[#EF4444] text-xs font-semibold uppercase tracking-wide">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            {result.status === 'error' ? 'Compilation / Simulation Error' : 'Error Details'}
+                          </div>
+                          <button
+                            onClick={() => navigator.clipboard?.writeText(result.compilation_error)}
+                            className="text-xs text-[#7A8FA8] hover:text-[#E8EDF4] px-2 py-0.5 rounded transition-colors"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                        <pre className="font-mono text-xs bg-[#0A0E14] p-4 text-[#EF4444] overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+                          {result.compilation_error}
+                        </pre>
                       </div>
                     )}
 
@@ -192,10 +244,13 @@ export default function ProblemDetailPage() {
                       <div className="space-y-2">
                         <div className="text-xs font-semibold text-[#7A8FA8] uppercase tracking-wide">Test Results</div>
                         {result.testcase_results.map((tc, i) => (
-                          <div key={i} className={`flex items-center gap-2 p-2.5 rounded-lg border text-sm ${tc.passed ? 'bg-[#22C55E]/5 border-[#22C55E]/15' : 'bg-[#EF4444]/5 border-[#EF4444]/15'}`}>
-                            {tc.passed ? <CheckCircle className="w-4 h-4 text-[#22C55E] shrink-0" /> : <XCircle className="w-4 h-4 text-[#EF4444] shrink-0" />}
-                            <span className={tc.passed ? 'text-[#22C55E]' : 'text-[#EF4444]'}>Test {i + 1}</span>
-                            {tc.output && <span className="text-[#7A8FA8] font-mono text-xs ml-auto truncate">Output: {tc.output}</span>}
+                          <div key={i} className={`flex flex-col gap-1 p-2.5 rounded-lg border text-sm ${tc.passed ? 'bg-[#22C55E]/5 border-[#22C55E]/15' : 'bg-[#EF4444]/5 border-[#EF4444]/15'}`}>
+                            <div className="flex items-center gap-2">
+                              {tc.passed ? <CheckCircle className="w-4 h-4 text-[#22C55E] shrink-0" /> : <XCircle className="w-4 h-4 text-[#EF4444] shrink-0" />}
+                              <span className={tc.passed ? 'text-[#22C55E]' : 'text-[#EF4444]'}>Test {i + 1}</span>
+                              {tc.output && <span className="text-[#7A8FA8] font-mono text-xs ml-auto">Output: <span className="text-[#C8D4E0]">{tc.output.trim()}</span></span>}
+                            </div>
+                            {tc.error && <pre className="ml-6 text-xs font-mono text-[#EF4444] whitespace-pre-wrap">{tc.error}</pre>}
                           </div>
                         ))}
                       </div>
@@ -227,9 +282,36 @@ export default function ProblemDetailPage() {
         <div className="flex-1 flex flex-col" style={{ minHeight: '500px' }}>
           {/* Editor Header */}
           <div className="flex items-center justify-between px-4 py-2.5 bg-[#13171E] border-b border-[#1E2530]">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-[#7A8FA8] font-medium">Verilog</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#4A8FE8]"></span>
+            {/* Language Selector */}
+            <div className="relative">
+              <button
+                onClick={() => setLangMenuOpen(o => !o)}
+                className="flex items-center gap-1.5 text-xs font-medium text-[#C8D4E0] bg-[#1A1F28] border border-[#1E2530] hover:border-[#4A8FE8] px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[#4A8FE8]"></span>
+                {LANGUAGES.find(l => l.value === language)?.label || 'Verilog'}
+                <ChevronDown className="w-3.5 h-3.5 text-[#7A8FA8]" />
+              </button>
+              {langMenuOpen && (
+                <div className="absolute top-full left-0 mt-1 w-44 bg-[#1A1F28] border border-[#1E2530] rounded-lg shadow-xl z-50 overflow-hidden">
+                  {LANGUAGES.map(lang => (
+                    <button
+                      key={lang.value}
+                      onClick={() => !lang.disabled && handleLanguageChange(lang.value)}
+                      disabled={lang.disabled}
+                      className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                        lang.disabled
+                          ? 'text-[#4A5568] cursor-not-allowed'
+                          : language === lang.value
+                            ? 'text-[#4A8FE8] bg-[#4A8FE8]/10'
+                            : 'text-[#C8D4E0] hover:bg-[#13171E]'
+                      }`}
+                    >
+                      {lang.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <button
               onClick={handleSubmit}
@@ -245,7 +327,7 @@ export default function ProblemDetailPage() {
           <div className="flex-1">
             <Editor
               height="100%"
-              defaultLanguage="verilog"
+              language={LANGUAGES.find(l => l.value === language)?.monacoLang || 'verilog'}
               value={code}
               onChange={val => setCode(val || '')}
               theme="vs-dark"

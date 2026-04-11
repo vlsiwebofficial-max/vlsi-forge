@@ -15,8 +15,7 @@ export default function ProblemsPage() {
   const [diff, setDiff] = useState('All');
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    axios.get(`${API}/api/problems`, { headers: { Authorization: `Bearer ${token}` } })
+    axios.get(`${API}/api/problems`, { withCredentials: true })
       .then(res => setProblems(res.data))
       .catch(() => {})
       .finally(() => setLoading(false));
