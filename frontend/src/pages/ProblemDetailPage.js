@@ -59,7 +59,8 @@ export default function ProblemDetailPage() {
     axios.get(`${API}/api/problems/${id}`, { withCredentials: true })
       .then(res => {
         setProblem(res.data);
-        setCode(res.data.starter_code || DEFAULT_CODE[language]);
+        // Use problem's starter code; fall back to Verilog template on initial load
+        setCode(res.data.starter_code || DEFAULT_CODE.verilog);
       })
       .catch(() => navigate('/problems'))
       .finally(() => setLoading(false));
