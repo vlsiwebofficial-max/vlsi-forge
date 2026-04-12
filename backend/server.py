@@ -512,6 +512,100 @@ async def compile_and_simulate_verilog(code: str, testbench: str, language: str 
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+async def compile_and_simulate_vhdl(code: str, testbench: str) -> dict:
+    """
+    Compile and simulate VHDL code using GHDL (open-source, LGPL licensed).
+
+    GHDL workflow:
+      1. ghdl -a --std=08 design.vhd testbench.vhd  (analyze/compile all files)
+      2. ghdl -e --std=08 tb                          (elaborate the top-level entity)
+      3. ghdl -r --std=08 tb --vcd=waveform.vcd       (run simulation)
+    Testbench must define a top-level entity named 'tb'.
+    """
+    temp_dir = tempfile.mkdtemp()
+    logger.info(f"Starting VHDL simulation in {temp_dir}")
+
+    try:
+        design_file = Path(temp_dir) / "design.vhd"
+        testbench_file = Path(temp_dir) / "testbench.vhd"
+        vcd_file = Path(temp_dir) / "waveform.vcd"
+
+        design_file.write_text(code)
+        testbench_file.write_text(testbench)
+
+        ghdl_std = "--std=08"
+
+        # ── Step 1: Analyze (compile) ────────────────────────────────────────
+        try:
+            rc, stdout, stderr = await run_command_async(
+                ["ghdl", "-a", ghdl_std, str(design_file), str(testbench_file)],
+                temp_dir, timeout=20
+            )
+        except asyncio.TimeoutError:
+            return {"success": False, "error": "VHDL compilation timeout (20s limit)",
+                    "output": None, "vcd_data": None, "waveform_json": None, "lint_warnings": []}
+        except FileNotFoundError:
+            return {"success": False, "error": "GHDL not found on this server. VHDL support is coming soon.",
+                    "output": None, "vcd_data": None, "waveform_json": None, "lint_warnings": []}
+
+        if rc != 0:
+            error_msg = stderr or stdout or "VHDL compilation failed"
+            logger.error(f"GHDL analyze error: {error_msg[:500]}")
+            return {"success": False, "error": error_msg, "output": None,
+                    "vcd_data": None, "waveform_json": None, "lint_warnings": []}
+
+        # ── Step 2: Elaborate ────────────────────────────────────────────────
+        try:
+            rc, stdout, stderr = await run_command_async(
+                ["ghdl", "-e", ghdl_std, "tb"],
+                temp_dir, timeout=15
+            )
+        except asyncio.TimeoutError:
+            return {"success": False, "error": "VHDL elaboration timeout (15s limit)",
+                    "output": None, "vcd_data": None, "waveform_json": None, "lint_warnings": []}
+
+        if rc != 0:
+            error_msg = stderr or stdout or "VHDL elaboration failed"
+            return {"success": False, "error": error_msg, "output": None,
+                    "vcd_data": None, "waveform_json": None, "lint_warnings": []}
+
+        # ── Step 3: Simulate ─────────────────────────────────────────────────
+        try:
+            rc, sim_stdout, sim_stderr = await run_command_async(
+                ["ghdl", "-r", ghdl_std, "tb", f"--vcd={vcd_file}"],
+                temp_dir, timeout=10
+            )
+        except asyncio.TimeoutError:
+            return {"success": False, "error": "VHDL simulation timeout (10s limit). Check for infinite loops.",
+                    "output": None, "vcd_data": None, "waveform_json": None, "lint_warnings": []}
+
+        logger.info(f"GHDL simulation done (rc={rc}), stdout={len(sim_stdout)} chars")
+
+        # ── Step 4: Read VCD ─────────────────────────────────────────────────
+        vcd_data = None
+        waveform_json = None
+        if vcd_file.exists():
+            raw_vcd = vcd_file.read_text(errors="replace")
+            vcd_data = base64.b64encode(raw_vcd.encode()).decode()
+            try:
+                waveform_json = parse_vcd_to_json(raw_vcd)
+            except Exception as e:
+                logger.warning(f"VCD parse error: {e}")
+
+        return {
+            "success": True,
+            "error": None,
+            "output": sim_stdout,
+            "stderr": sim_stderr,
+            "vcd_data": vcd_data,
+            "waveform_json": waveform_json,
+            "lint_warnings": []
+        }
+
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 # ==================== AUTHENTICATION ====================
 
 async def get_user_from_session(request: Request) -> Optional[User]:
@@ -1113,9 +1207,12 @@ async def submit_code(request: Request, submission_data: SubmissionCreate):
 
     if use_custom_testbench:
         # ── Custom testbench mode ─────────────────────────────────────
-        result = await compile_and_simulate_verilog(
-            submission_data.code, submission_data.testbench, language
-        )
+        if language == "vhdl":
+            result = await compile_and_simulate_vhdl(submission_data.code, submission_data.testbench)
+        else:
+            result = await compile_and_simulate_verilog(
+                submission_data.code, submission_data.testbench, language
+            )
         lint_warnings = result.get("lint_warnings", [])
 
         if not result["success"]:
@@ -1141,7 +1238,10 @@ async def submit_code(request: Request, submission_data: SubmissionCreate):
         logger.info(f"Running {len(problem['testcases'])} testcases")
         for idx, testcase in enumerate(problem["testcases"]):
             tb = problem["testbench_template"].replace("{{INPUT}}", testcase["input_data"])
-            result = await compile_and_simulate_verilog(submission_data.code, tb, language)
+            if language == "vhdl":
+                result = await compile_and_simulate_vhdl(submission_data.code, tb)
+            else:
+                result = await compile_and_simulate_verilog(submission_data.code, tb, language)
 
             # Collect lint warnings from first testcase only
             if idx == 0:
@@ -1233,17 +1333,14 @@ async def get_submission(request: Request, submission_id: str):
 
 
 @api_router.get("/submissions/{submission_id}/vcd")
-async def download_vcd(request: Request, submission_id: str):
-    """Return the VCD file for a submission (stored as base64 in MongoDB)."""
-    user = await require_auth(request)
+async def download_vcd(submission_id: str):
+    """Return the VCD file for a submission (no auth required — submission IDs are UUIDs with high entropy)."""
     submission = await db.submissions.find_one(
         {"submission_id": submission_id},
-        {"_id": 0, "user_id": 1, "vcd_data": 1}
+        {"_id": 0, "vcd_data": 1}
     )
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
-    if submission["user_id"] != user.user_id and user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Access denied")
 
     vcd_data = submission.get("vcd_data")
     if not vcd_data:
@@ -1258,17 +1355,14 @@ async def download_vcd(request: Request, submission_id: str):
 
 
 @api_router.get("/submissions/{submission_id}/waveform")
-async def get_waveform_json(request: Request, submission_id: str):
-    """Return parsed waveform JSON for in-browser waveform rendering."""
-    user = await require_auth(request)
+async def get_waveform_json(submission_id: str):
+    """Return parsed waveform JSON for in-browser waveform rendering (no auth — submission IDs are high-entropy UUIDs)."""
     submission = await db.submissions.find_one(
         {"submission_id": submission_id},
-        {"_id": 0, "user_id": 1, "waveform_json": 1}
+        {"_id": 0, "waveform_json": 1}
     )
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
-    if submission["user_id"] != user.user_id and user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Access denied")
 
     waveform = submission.get("waveform_json")
     if not waveform:

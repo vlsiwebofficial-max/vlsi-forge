@@ -20,13 +20,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11-venv \
     python3-pip \
     iverilog \
+    ghdl \
     verilator \
     curl \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Verify simulation tools are installed
-RUN iverilog -V 2>&1 | head -1 && verilator --version 2>&1 | head -1
+RUN iverilog -V 2>&1 | head -1 && verilator --version 2>&1 | head -1 && ghdl --version 2>&1 | head -1
 
 # ── 2. Create non-root user (security best practice) ─────────────────────────
 RUN useradd -m -u 1001 -s /bin/bash appuser
