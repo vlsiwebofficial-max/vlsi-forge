@@ -243,6 +243,7 @@ async def create_indexes():
         await db.problems.create_index([("difficulty", 1), ("tags", 1)])
         await db.problems.create_index("domain")
         await db.problems.create_index("companies")
+        await db.user_code.create_index([("user_id", 1), ("problem_id", 1)], unique=True)
         await db.submissions.create_index("submission_id", unique=True)
         await db.submissions.create_index([("user_id", 1), ("submitted_at", -1)])
         await db.submissions.create_index([("problem_id", 1), ("status", 1)])
@@ -1545,7 +1546,331 @@ async def get_all_submissions(request: Request, skip: int = 0, limit: int = 100)
     return {"submissions": submissions, "total": total, "skip": skip, "limit": limit}
 
 
+# ==================== USER CODE PERSISTENCE ====================
+
+class UserCodeSave(BaseModel):
+    code: str
+    language: Optional[str] = "verilog"
+
+@api_router.get("/user-code/{problem_id}")
+async def get_user_code(request: Request, problem_id: str):
+    """Return the user's last saved code for a problem."""
+    user = await require_auth(request)
+    doc = await db.user_code.find_one(
+        {"user_id": user.user_id, "problem_id": problem_id},
+        {"_id": 0, "code": 1, "language": 1, "saved_at": 1}
+    )
+    if not doc:
+        return {"code": None, "language": "verilog", "saved_at": None}
+    return doc
+
+@api_router.put("/user-code/{problem_id}")
+async def save_user_code(request: Request, problem_id: str, body: UserCodeSave):
+    """Upsert the user's code draft for a problem (called on every editor change via debounce)."""
+    user = await require_auth(request)
+    now = datetime.now(timezone.utc).isoformat()
+    await db.user_code.update_one(
+        {"user_id": user.user_id, "problem_id": problem_id},
+        {"$set": {
+            "user_id": user.user_id,
+            "problem_id": problem_id,
+            "code": body.code,
+            "language": body.language,
+            "saved_at": now,
+        }},
+        upsert=True
+    )
+    return {"saved": True, "saved_at": now}
+
+
+# ==================== ADMIN: BATCH PROBLEM INSERT ====================
+
+@api_router.post("/admin/problems/batch")
+async def batch_add_problems(request: Request):
+    """
+    Insert a list of problems from the EXTENDED_PROBLEMS list.
+    Skips any problem whose title already exists (idempotent).
+    Admin-only.
+    """
+    await require_admin(request)
+    inserted = []
+    skipped = []
+    now = datetime.now(timezone.utc)
+
+    for p in EXTENDED_PROBLEMS:
+        existing = await db.problems.find_one({"title": p["title"]})
+        if existing:
+            skipped.append(p["title"])
+            continue
+
+        problem_id = f"prob_{uuid.uuid4().hex[:12]}"
+        tc_docs = []
+        for tc in p.get("testcases", []):
+            tc_docs.append({
+                "testcase_id": f"tc_{uuid.uuid4().hex[:8]}",
+                "input_data": tc["input_data"],
+                "expected_output": tc["expected_output"],
+                "is_hidden": tc.get("is_hidden", False),
+            })
+
+        doc = {
+            "problem_id": problem_id,
+            "title": p["title"],
+            "description": p["description"],
+            "difficulty": p["difficulty"],
+            "tags": p.get("tags", []),
+            "domain": p.get("domain"),
+            "companies": p.get("companies", []),
+            "constraints": p.get("constraints", ""),
+            "starter_code": p.get("starter_code", ""),
+            "testbench_template": p.get("testbench_template", ""),
+            "testcases": tc_docs,
+            "created_by": "system",
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+        await db.problems.insert_one(doc)
+        inserted.append(p["title"])
+
+    return {"inserted": inserted, "skipped": skipped,
+            "inserted_count": len(inserted), "skipped_count": len(skipped)}
+
+
 # ==================== ONE-TIME SEED ====================
+
+EXTENDED_PROBLEMS = [
+    # ── RTL Design ──────────────────────────────────────────────────────────────
+    {
+        "title": "Full Adder",
+        "difficulty": "Easy",
+        "domain": "RTL Design",
+        "companies": ["Intel", "Qualcomm", "AMD"],
+        "tags": ["combinational", "arithmetic"],
+        "description": "Design a 1-bit full adder with inputs `a`, `b`, `cin` and outputs `sum`, `cout`.\n\nA full adder adds three 1-bit numbers and produces a sum and carry-out.\n\n**Boolean equations:**\n- sum = a ⊕ b ⊕ cin\n- cout = (a·b) + (cin·(a⊕b))",
+        "constraints": "- Combinational logic only\n- No clock required",
+        "starter_code": "module full_adder(\n    input  a, b, cin,\n    output sum, cout\n);\n    // Your code here\nendmodule",
+        "testbench_template": "`timescale 1ns/1ps\nmodule tb;\n    reg a, b, cin;\n    wire sum, cout;\n    full_adder dut(.a(a),.b(b),.cin(cin),.sum(sum),.cout(cout));\n    initial begin\n        $dumpfile(\"waveform.vcd\"); $dumpvars(0,tb);\n        {{INPUT}}\n        $finish;\n    end\nendmodule",
+        "testcases": [
+            {"input_data": "a=0;b=0;cin=0;#10;$display(\"%b %b\",sum,cout);", "expected_output": "0 0", "is_hidden": False},
+            {"input_data": "a=0;b=1;cin=1;#10;$display(\"%b %b\",sum,cout);", "expected_output": "0 1", "is_hidden": False},
+            {"input_data": "a=1;b=1;cin=0;#10;$display(\"%b %b\",sum,cout);", "expected_output": "0 1", "is_hidden": False},
+            {"input_data": "a=1;b=1;cin=1;#10;$display(\"%b %b\",sum,cout);", "expected_output": "1 1", "is_hidden": True},
+        ],
+    },
+    {
+        "title": "4-to-1 Multiplexer",
+        "difficulty": "Easy",
+        "domain": "RTL Design",
+        "companies": ["Qualcomm", "MediaTek"],
+        "tags": ["combinational", "mux"],
+        "description": "Implement a 4-to-1 multiplexer with 4 single-bit data inputs `d[3:0]`, a 2-bit select `sel[1:0]`, and single-bit output `out`.\n\n- sel=00 → out=d[0]\n- sel=01 → out=d[1]\n- sel=10 → out=d[2]\n- sel=11 → out=d[3]",
+        "constraints": "- Purely combinational\n- No latches",
+        "starter_code": "module mux4to1(\n    input  [3:0] d,\n    input  [1:0] sel,\n    output out\n);\n    // Your code here\nendmodule",
+        "testbench_template": "`timescale 1ns/1ps\nmodule tb;\n    reg [3:0] d; reg [1:0] sel; wire out;\n    mux4to1 dut(.d(d),.sel(sel),.out(out));\n    initial begin\n        $dumpfile(\"waveform.vcd\"); $dumpvars(0,tb);\n        {{INPUT}}\n        $finish;\n    end\nendmodule",
+        "testcases": [
+            {"input_data": "d=4'b1010;sel=2'b00;#10;$display(\"%b\",out);", "expected_output": "0", "is_hidden": False},
+            {"input_data": "d=4'b1010;sel=2'b01;#10;$display(\"%b\",out);", "expected_output": "1", "is_hidden": False},
+            {"input_data": "d=4'b1010;sel=2'b10;#10;$display(\"%b\",out);", "expected_output": "0", "is_hidden": False},
+            {"input_data": "d=4'b1010;sel=2'b11;#10;$display(\"%b\",out);", "expected_output": "1", "is_hidden": True},
+        ],
+    },
+    {
+        "title": "4-bit Synchronous Counter",
+        "difficulty": "Easy",
+        "domain": "RTL Design",
+        "companies": ["NVIDIA", "Intel"],
+        "tags": ["sequential", "counter"],
+        "description": "Design a 4-bit synchronous up-counter with synchronous active-high reset.\n\n- On every rising clock edge: if `rst=1`, reset to 0; else increment by 1\n- Counter wraps from 15 back to 0 (natural overflow)\n- Output `count[3:0]` reflects current counter value",
+        "constraints": "- Synchronous reset\n- Positive-edge triggered\n- 4-bit output",
+        "starter_code": "module counter4(\n    input        clk, rst,\n    output reg [3:0] count\n);\n    // Your code here\nendmodule",
+        "testbench_template": "`timescale 1ns/1ps\nmodule tb;\n    reg clk=0, rst;\n    wire [3:0] count;\n    always #5 clk=~clk;\n    counter4 dut(.clk(clk),.rst(rst),.count(count));\n    initial begin\n        $dumpfile(\"waveform.vcd\"); $dumpvars(0,tb);\n        {{INPUT}}\n        $finish;\n    end\nendmodule",
+        "testcases": [
+            {"input_data": "rst=1;@(posedge clk);#1;$display(\"%0d\",count);", "expected_output": "0", "is_hidden": False},
+            {"input_data": "rst=1;@(posedge clk);#1;rst=0;repeat(3)@(posedge clk);#1;$display(\"%0d\",count);", "expected_output": "3", "is_hidden": False},
+            {"input_data": "rst=1;@(posedge clk);#1;rst=0;repeat(15)@(posedge clk);#1;$display(\"%0d\",count);", "expected_output": "15", "is_hidden": True},
+            {"input_data": "rst=1;@(posedge clk);#1;rst=0;repeat(16)@(posedge clk);#1;$display(\"%0d\",count);", "expected_output": "0", "is_hidden": True},
+        ],
+    },
+    {
+        "title": "Priority Encoder (4-to-2)",
+        "difficulty": "Medium",
+        "domain": "RTL Design",
+        "companies": ["Qualcomm", "AMD", "Broadcom"],
+        "tags": ["combinational", "encoder"],
+        "description": "Implement a 4-to-2 priority encoder.\n\nInputs `req[3:0]` represent 4 request lines. Output `grant[1:0]` encodes the index of the **highest-priority** active request (bit 3 is highest priority).\n\nAlso output `valid` — asserted when at least one request is active.\n\n**Priority:** req[3] > req[2] > req[1] > req[0]",
+        "constraints": "- If no request is active, `valid=0` and `grant` is don't-care\n- Purely combinational",
+        "starter_code": "module priority_enc(\n    input  [3:0] req,\n    output reg [1:0] grant,\n    output reg valid\n);\n    // Your code here\nendmodule",
+        "testbench_template": "`timescale 1ns/1ps\nmodule tb;\n    reg [3:0] req; wire [1:0] grant; wire valid;\n    priority_enc dut(.req(req),.grant(grant),.valid(valid));\n    initial begin\n        $dumpfile(\"waveform.vcd\"); $dumpvars(0,tb);\n        {{INPUT}}\n        $finish;\n    end\nendmodule",
+        "testcases": [
+            {"input_data": "req=4'b0001;#10;$display(\"%0d %b\",grant,valid);", "expected_output": "0 1", "is_hidden": False},
+            {"input_data": "req=4'b0110;#10;$display(\"%0d %b\",grant,valid);", "expected_output": "2 1", "is_hidden": False},
+            {"input_data": "req=4'b1010;#10;$display(\"%0d %b\",grant,valid);", "expected_output": "3 1", "is_hidden": False},
+            {"input_data": "req=4'b0000;#10;$display(\"%b\",valid);", "expected_output": "0", "is_hidden": True},
+        ],
+    },
+    {
+        "title": "8-bit Barrel Shifter",
+        "difficulty": "Medium",
+        "domain": "RTL Design",
+        "companies": ["ARM", "NVIDIA", "Intel"],
+        "tags": ["combinational", "shifter", "datapath"],
+        "description": "Design an 8-bit barrel shifter that can perform left logical shifts.\n\n- Input `data[7:0]`: value to shift\n- Input `shamt[2:0]`: shift amount (0–7)\n- Output `out[7:0]`: `data` shifted left by `shamt` positions\n- Vacated LSBs are filled with 0",
+        "constraints": "- Combinational logic\n- No sequential elements",
+        "starter_code": "module barrel_shift(\n    input  [7:0] data,\n    input  [2:0] shamt,\n    output [7:0] out\n);\n    // Your code here\nendmodule",
+        "testbench_template": "`timescale 1ns/1ps\nmodule tb;\n    reg [7:0] data; reg [2:0] shamt; wire [7:0] out;\n    barrel_shift dut(.data(data),.shamt(shamt),.out(out));\n    initial begin\n        $dumpfile(\"waveform.vcd\"); $dumpvars(0,tb);\n        {{INPUT}}\n        $finish;\n    end\nendmodule",
+        "testcases": [
+            {"input_data": "data=8'b00000001;shamt=3'd1;#10;$display(\"%08b\",out);", "expected_output": "00000010", "is_hidden": False},
+            {"input_data": "data=8'b00000001;shamt=3'd4;#10;$display(\"%08b\",out);", "expected_output": "00010000", "is_hidden": False},
+            {"input_data": "data=8'b10110011;shamt=3'd2;#10;$display(\"%08b\",out);", "expected_output": "11001100", "is_hidden": True},
+            {"input_data": "data=8'b10000000;shamt=3'd1;#10;$display(\"%08b\",out);", "expected_output": "00000000", "is_hidden": True},
+        ],
+    },
+    {
+        "title": "Moore FSM — Sequence Detector (101)",
+        "difficulty": "Medium",
+        "domain": "RTL Design",
+        "companies": ["Intel", "Qualcomm", "NVIDIA"],
+        "tags": ["sequential", "FSM", "Moore"],
+        "description": "Design a **Moore FSM** that detects the sequence `101` on serial input `din`.\n\nOutput `detect` is HIGH for exactly one clock cycle when the sequence `101` is completed.\n\n- Non-overlapping detection (after detecting `101`, the FSM resets to IDLE)\n- Synchronous active-high reset\n- Positive-edge triggered",
+        "constraints": "- Moore machine: output depends only on current state\n- Non-overlapping detection",
+        "starter_code": "module seq_detector(\n    input  clk, rst, din,\n    output reg detect\n);\n    // Define states and transitions\nendmodule",
+        "testbench_template": "`timescale 1ns/1ps\nmodule tb;\n    reg clk=0,rst,din; wire detect;\n    always #5 clk=~clk;\n    seq_detector dut(.clk(clk),.rst(rst),.din(din),.detect(detect));\n    task send(input b); din=b; @(posedge clk); #1; endtask\n    initial begin\n        $dumpfile(\"waveform.vcd\"); $dumpvars(0,tb);\n        {{INPUT}}\n        $finish;\n    end\nendmodule",
+        "testcases": [
+            {"input_data": "rst=1;@(posedge clk);#1;rst=0;send(1);send(0);send(1);$display(\"%b\",detect);", "expected_output": "1", "is_hidden": False},
+            {"input_data": "rst=1;@(posedge clk);#1;rst=0;send(1);send(1);send(1);$display(\"%b\",detect);", "expected_output": "0", "is_hidden": False},
+            {"input_data": "rst=1;@(posedge clk);#1;rst=0;send(0);send(1);send(0);send(1);$display(\"%b\",detect);", "expected_output": "1", "is_hidden": True},
+        ],
+    },
+    {
+        "title": "Synchronous FIFO (4-deep)",
+        "difficulty": "Hard",
+        "domain": "RTL Design",
+        "companies": ["NVIDIA", "Intel", "Broadcom", "Marvell"],
+        "tags": ["sequential", "FIFO", "memory"],
+        "description": "Design a synchronous FIFO with depth 4 and data width 8 bits.\n\n**Ports:**\n- `clk`, `rst` (sync active-high)\n- `wr_en`: write enable — push `din[7:0]`\n- `rd_en`: read enable — pop `dout[7:0]`\n- `full`: asserted when FIFO is full\n- `empty`: asserted when FIFO is empty\n\n**Behaviour:**\n- Write on rising edge when `wr_en=1` and `!full`\n- Read on rising edge when `rd_en=1` and `!empty`\n- `empty` is HIGH after reset",
+        "constraints": "- Depth = 4, Width = 8\n- No overflow or underflow\n- Synthesisable RTL",
+        "starter_code": "module fifo4(\n    input        clk, rst,\n    input        wr_en, rd_en,\n    input  [7:0] din,\n    output reg [7:0] dout,\n    output       full, empty\n);\n    // Your code here\nendmodule",
+        "testbench_template": "`timescale 1ns/1ps\nmodule tb;\n    reg clk=0,rst,wr_en,rd_en; reg [7:0] din;\n    wire [7:0] dout; wire full,empty;\n    always #5 clk=~clk;\n    fifo4 dut(.clk(clk),.rst(rst),.wr_en(wr_en),.rd_en(rd_en),.din(din),.dout(dout),.full(full),.empty(empty));\n    initial begin\n        $dumpfile(\"waveform.vcd\"); $dumpvars(0,tb);\n        {{INPUT}}\n        $finish;\n    end\nendmodule",
+        "testcases": [
+            {"input_data": "rst=1;wr_en=0;rd_en=0;@(posedge clk);#1;rst=0;$display(\"%b\",empty);", "expected_output": "1", "is_hidden": False},
+            {"input_data": "rst=1;wr_en=0;rd_en=0;@(posedge clk);#1;rst=0;wr_en=1;din=8'hAB;@(posedge clk);#1;wr_en=0;rd_en=1;@(posedge clk);#1;$display(\"%h\",dout);", "expected_output": "ab", "is_hidden": False},
+            {"input_data": "rst=1;wr_en=0;rd_en=0;@(posedge clk);#1;rst=0;wr_en=1;din=8'h01;@(posedge clk);#1;din=8'h02;@(posedge clk);#1;din=8'h03;@(posedge clk);#1;din=8'h04;@(posedge clk);#1;wr_en=0;$display(\"%b\",full);", "expected_output": "1", "is_hidden": True},
+        ],
+    },
+    {
+        "title": "Round-Robin Arbiter (4 requestors)",
+        "difficulty": "Hard",
+        "domain": "RTL Design",
+        "companies": ["NVIDIA", "Broadcom", "Marvell", "Intel"],
+        "tags": ["sequential", "arbiter", "fairness"],
+        "description": "Design a 4-requestor round-robin arbiter.\n\n**Ports:**\n- `clk`, `rst` (sync active-high)\n- `req[3:0]`: request lines (active-high)\n- `grant[3:0]`: one-hot grant output\n\n**Behaviour:**\n- Grant is given to the next requesting client after the last grant (round-robin order)\n- Only one grant active at a time (one-hot)\n- After reset, start arbitrating from requestor 0",
+        "constraints": "- One-hot grant output\n- Fair round-robin, no starvation\n- Synchronous reset",
+        "starter_code": "module rr_arbiter(\n    input      clk, rst,\n    input  [3:0] req,\n    output reg [3:0] grant\n);\n    // Your code here\nendmodule",
+        "testbench_template": "`timescale 1ns/1ps\nmodule tb;\n    reg clk=0,rst; reg [3:0] req; wire [3:0] grant;\n    always #5 clk=~clk;\n    rr_arbiter dut(.clk(clk),.rst(rst),.req(req),.grant(grant));\n    initial begin\n        $dumpfile(\"waveform.vcd\"); $dumpvars(0,tb);\n        {{INPUT}}\n        $finish;\n    end\nendmodule",
+        "testcases": [
+            {"input_data": "rst=1;req=4'b0000;@(posedge clk);#1;rst=0;req=4'b0001;@(posedge clk);#1;$display(\"%04b\",grant);", "expected_output": "0001", "is_hidden": False},
+            {"input_data": "rst=1;req=4'b0000;@(posedge clk);#1;rst=0;req=4'b0011;@(posedge clk);#1;$display(\"%04b\",grant);", "expected_output": "0001", "is_hidden": False},
+            {"input_data": "rst=1;req=4'b0000;@(posedge clk);#1;rst=0;req=4'b0011;@(posedge clk);#1;req=4'b0010;@(posedge clk);#1;$display(\"%04b\",grant);", "expected_output": "0010", "is_hidden": True},
+        ],
+    },
+    # ── Design Verification ─────────────────────────────────────────────────────
+    {
+        "title": "Verify a Half Adder (Exhaustive)",
+        "difficulty": "Easy",
+        "domain": "Design Verification",
+        "companies": ["Cadence", "Synopsys", "Intel"],
+        "tags": ["testbench", "verification", "exhaustive"],
+        "description": "Write a **self-checking testbench** for the following half adder module. Your testbench must test **all 4 input combinations** and use `$error` or `$display` to report any mismatches.\n\nThe DUT is provided — do not modify it.\n\n```verilog\nmodule half_adder(\n    input  a, b,\n    output sum, carry\n);\n    assign sum   = a ^ b;\n    assign carry = a & b;\nendmodule\n```\n\nOutput a single line: `PASS` if all tests pass, or `FAIL` on first mismatch.",
+        "constraints": "- Must test all 4 input combinations\n- Output exactly `PASS` or `FAIL`\n- Use `$finish` to end simulation",
+        "starter_code": "// Write your testbench here\n// The DUT (half_adder) will be compiled alongside your testbench\nmodule tb;\n    // Your testbench code\nendmodule",
+        "testbench_template": "module half_adder(\n    input  a, b,\n    output sum, carry\n);\n    assign sum   = a ^ b;\n    assign carry = a & b;\nendmodule\n{{INPUT}}",
+        "testcases": [
+            {"input_data": "// testbench is in the code above", "expected_output": "PASS", "is_hidden": False},
+        ],
+    },
+    {
+        "title": "Clock Domain Crossing — Sync Flop",
+        "difficulty": "Medium",
+        "domain": "Design Verification",
+        "companies": ["NVIDIA", "Intel", "Qualcomm"],
+        "tags": ["CDC", "synchronizer", "metastability"],
+        "description": "Design a **2-flop synchronizer** for crossing a single-bit signal from a slow clock domain to a fast clock domain.\n\nThe synchronizer must consist of exactly **two pipeline registers** clocked on `clk_dst`.\n\n**Ports:**\n- `clk_dst`: destination domain clock\n- `rst`: async active-high reset\n- `data_in`: async input (from source domain)\n- `data_out`: synchronized output (in destination domain)\n\nThis is a fundamental CDC primitive used in every SoC.",
+        "constraints": "- Exactly 2 pipeline flops\n- Asynchronous reset (both flops reset to 0)\n- Output is registered",
+        "starter_code": "module sync_2ff(\n    input  clk_dst,\n    input  rst,\n    input  data_in,\n    output data_out\n);\n    // Your code here\nendmodule",
+        "testbench_template": "`timescale 1ns/1ps\nmodule tb;\n    reg clk=0,rst,data_in; wire data_out;\n    always #5 clk=~clk;\n    sync_2ff dut(.clk_dst(clk),.rst(rst),.data_in(data_in),.data_out(data_out));\n    initial begin\n        $dumpfile(\"waveform.vcd\"); $dumpvars(0,tb);\n        {{INPUT}}\n        $finish;\n    end\nendmodule",
+        "testcases": [
+            {"input_data": "rst=1;data_in=0;repeat(3)@(posedge clk);#1;rst=0;$display(\"%b\",data_out);", "expected_output": "0", "is_hidden": False},
+            {"input_data": "rst=1;data_in=0;repeat(3)@(posedge clk);#1;rst=0;data_in=1;@(posedge clk);#1;$display(\"%b\",data_out);", "expected_output": "0", "is_hidden": False},
+            {"input_data": "rst=1;data_in=0;repeat(3)@(posedge clk);#1;rst=0;data_in=1;repeat(2)@(posedge clk);#1;$display(\"%b\",data_out);", "expected_output": "1", "is_hidden": True},
+        ],
+    },
+    {
+        "title": "Gray Code Counter (4-bit)",
+        "difficulty": "Medium",
+        "domain": "Design Verification",
+        "companies": ["Intel", "Marvell", "Cadence"],
+        "tags": ["sequential", "counter", "gray-code"],
+        "description": "Design a 4-bit **Gray code counter** — a counter that increments through Gray code values (only 1 bit changes per step).\n\n**Ports:**\n- `clk`: clock\n- `rst`: synchronous active-high reset (resets to 4'b0000)\n- `en`: enable — counter increments only when high\n- `gray[3:0]`: current Gray code value\n\n**Gray code sequence (first 8):** 0000 → 0001 → 0011 → 0010 → 0110 → 0111 → 0101 → 0100 → ...",
+        "constraints": "- Output must follow Gray code sequence\n- Synchronous reset and enable",
+        "starter_code": "module gray_counter(\n    input      clk, rst, en,\n    output reg [3:0] gray\n);\n    // Hint: use a binary counter internally, then convert\nendmodule",
+        "testbench_template": "`timescale 1ns/1ps\nmodule tb;\n    reg clk=0,rst,en; wire [3:0] gray;\n    always #5 clk=~clk;\n    gray_counter dut(.clk(clk),.rst(rst),.en(en),.gray(gray));\n    initial begin\n        $dumpfile(\"waveform.vcd\"); $dumpvars(0,tb);\n        {{INPUT}}\n        $finish;\n    end\nendmodule",
+        "testcases": [
+            {"input_data": "rst=1;en=0;@(posedge clk);#1;rst=0;$display(\"%04b\",gray);", "expected_output": "0000", "is_hidden": False},
+            {"input_data": "rst=1;en=0;@(posedge clk);#1;rst=0;en=1;@(posedge clk);#1;$display(\"%04b\",gray);", "expected_output": "0001", "is_hidden": False},
+            {"input_data": "rst=1;en=0;@(posedge clk);#1;rst=0;en=1;repeat(3)@(posedge clk);#1;$display(\"%04b\",gray);", "expected_output": "0010", "is_hidden": True},
+        ],
+    },
+    # ── Computer Architecture ───────────────────────────────────────────────────
+    {
+        "title": "Register File (8×8)",
+        "difficulty": "Medium",
+        "domain": "Computer Architecture",
+        "companies": ["NVIDIA", "ARM", "Intel", "AMD"],
+        "tags": ["memory", "register-file", "datapath"],
+        "description": "Implement a small **8-register × 8-bit register file** — a fundamental building block in every CPU datapath.\n\n**Ports:**\n- `clk`\n- `wr_en`: write enable\n- `wr_addr[2:0]`: write register index\n- `wr_data[7:0]`: data to write\n- `rd_addr1[2:0]`, `rd_addr2[2:0]`: two independent read ports\n- `rd_data1[7:0]`, `rd_data2[7:0]`: read outputs\n\n**Behaviour:**\n- Synchronous write on rising edge when `wr_en=1`\n- Asynchronous read (combinational)\n- Register 0 is hardwired to 0 (writes to r0 are ignored)",
+        "constraints": "- Register 0 always reads 0\n- Asynchronous read, synchronous write",
+        "starter_code": "module reg_file(\n    input         clk, wr_en,\n    input  [2:0]  wr_addr, rd_addr1, rd_addr2,\n    input  [7:0]  wr_data,\n    output [7:0]  rd_data1, rd_data2\n);\n    // Your code here\nendmodule",
+        "testbench_template": "`timescale 1ns/1ps\nmodule tb;\n    reg clk=0,wr_en; reg [2:0] wr_addr,rd_addr1,rd_addr2;\n    reg [7:0] wr_data; wire [7:0] rd_data1,rd_data2;\n    always #5 clk=~clk;\n    reg_file dut(.clk(clk),.wr_en(wr_en),.wr_addr(wr_addr),.rd_addr1(rd_addr1),.rd_addr2(rd_addr2),.wr_data(wr_data),.rd_data1(rd_data1),.rd_data2(rd_data2));\n    initial begin\n        $dumpfile(\"waveform.vcd\"); $dumpvars(0,tb);\n        {{INPUT}}\n        $finish;\n    end\nendmodule",
+        "testcases": [
+            {"input_data": "wr_en=1;wr_addr=3'd1;wr_data=8'hAB;@(posedge clk);#1;wr_en=0;rd_addr1=3'd1;rd_addr2=3'd0;#1;$display(\"%h %h\",rd_data1,rd_data2);", "expected_output": "ab 00", "is_hidden": False},
+            {"input_data": "wr_en=1;wr_addr=3'd0;wr_data=8'hFF;@(posedge clk);#1;wr_en=0;rd_addr1=3'd0;#1;$display(\"%h\",rd_data1);", "expected_output": "00", "is_hidden": False},
+            {"input_data": "wr_en=1;wr_addr=3'd5;wr_data=8'h42;@(posedge clk);#1;wr_en=1;wr_addr=3'd5;wr_data=8'h99;@(posedge clk);#1;wr_en=0;rd_addr1=3'd5;#1;$display(\"%h\",rd_data1);", "expected_output": "99", "is_hidden": True},
+        ],
+    },
+    {
+        "title": "ALU (4-bit, 4 operations)",
+        "difficulty": "Medium",
+        "domain": "Computer Architecture",
+        "companies": ["ARM", "NVIDIA", "Intel", "AMD"],
+        "tags": ["combinational", "ALU", "datapath"],
+        "description": "Design a 4-bit Arithmetic Logic Unit (ALU) supporting 4 operations.\n\n**Ports:**\n- `a[3:0]`, `b[3:0]`: operands\n- `op[1:0]`: operation select\n- `result[3:0]`: output\n- `zero`: asserted when `result == 0`\n\n**Operations:**\n| op | Function |\n|----|----------|\n| 00 | ADD: result = a + b |\n| 01 | SUB: result = a - b |\n| 10 | AND: result = a & b |\n| 11 | OR:  result = a \\| b |",
+        "constraints": "- Combinational logic\n- `zero` flag is purely combinational",
+        "starter_code": "module alu4(\n    input  [3:0] a, b,\n    input  [1:0] op,\n    output reg [3:0] result,\n    output zero\n);\n    // Your code here\nendmodule",
+        "testbench_template": "`timescale 1ns/1ps\nmodule tb;\n    reg [3:0] a,b; reg [1:0] op; wire [3:0] result; wire zero;\n    alu4 dut(.a(a),.b(b),.op(op),.result(result),.zero(zero));\n    initial begin\n        $dumpfile(\"waveform.vcd\"); $dumpvars(0,tb);\n        {{INPUT}}\n        $finish;\n    end\nendmodule",
+        "testcases": [
+            {"input_data": "a=4'd5;b=4'd3;op=2'b00;#10;$display(\"%0d\",result);", "expected_output": "8", "is_hidden": False},
+            {"input_data": "a=4'd5;b=4'd3;op=2'b01;#10;$display(\"%0d\",result);", "expected_output": "2", "is_hidden": False},
+            {"input_data": "a=4'b1010;b=4'b1100;op=2'b10;#10;$display(\"%04b\",result);", "expected_output": "1000", "is_hidden": False},
+            {"input_data": "a=4'd5;b=4'd5;op=2'b01;#10;$display(\"%b\",zero);", "expected_output": "1", "is_hidden": True},
+        ],
+    },
+    {
+        "title": "Pipeline Register (2-stage)",
+        "difficulty": "Hard",
+        "domain": "Computer Architecture",
+        "companies": ["NVIDIA", "ARM", "Intel", "AMD"],
+        "tags": ["pipeline", "registers", "architecture"],
+        "description": "Implement a **2-stage pipeline** for the following computation:\n\n**Stage 1 (combinational):** `add_result = a + b`\n**Stage 2 (registered):** `mul_result = add_result * c` (use 8-bit result)\n\n**Ports:**\n- `clk`\n- `rst`: synchronous active-high\n- `a[3:0]`, `b[3:0]`, `c[3:0]`: inputs (sampled in Stage 1 each cycle)\n- `result[7:0]`: final output (1-cycle pipeline latency after first input)\n- `valid`: HIGH when result is valid (after first pipeline fill cycle)\n\nThis models the IF→EX pipeline pattern used in every processor.",
+        "constraints": "- 1-cycle latency between input and result\n- `valid` should go high after the first clock following reset de-assertion with inputs present",
+        "starter_code": "module pipe2(\n    input        clk, rst,\n    input  [3:0] a, b, c,\n    output reg [7:0] result,\n    output reg valid\n);\n    // Your code here\nendmodule",
+        "testbench_template": "`timescale 1ns/1ps\nmodule tb;\n    reg clk=0,rst; reg [3:0] a,b,c; wire [7:0] result; wire valid;\n    always #5 clk=~clk;\n    pipe2 dut(.clk(clk),.rst(rst),.a(a),.b(b),.c(c),.result(result),.valid(valid));\n    initial begin\n        $dumpfile(\"waveform.vcd\"); $dumpvars(0,tb);\n        {{INPUT}}\n        $finish;\n    end\nendmodule",
+        "testcases": [
+            {"input_data": "rst=1;a=0;b=0;c=0;@(posedge clk);#1;rst=0;$display(\"%b\",valid);", "expected_output": "0", "is_hidden": False},
+            {"input_data": "rst=1;a=0;b=0;c=0;@(posedge clk);#1;rst=0;a=4'd2;b=4'd3;c=4'd4;@(posedge clk);#1;$display(\"%b %0d\",valid,result);", "expected_output": "1 20", "is_hidden": False},
+            {"input_data": "rst=1;a=0;b=0;c=0;@(posedge clk);#1;rst=0;a=4'd1;b=4'd2;c=4'd3;@(posedge clk);#1;a=4'd4;b=4'd5;c=4'd2;@(posedge clk);#1;$display(\"%0d\",result);", "expected_output": "18", "is_hidden": True},
+        ],
+    },
+]
 
 SEED_PROBLEMS = [
     {

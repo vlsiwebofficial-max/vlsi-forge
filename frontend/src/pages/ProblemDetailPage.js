@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API } from '../App';
@@ -256,19 +256,83 @@ export default function ProblemDetailPage() {
   const [result, setResult] = useState(null);
   const [activeTab, setActiveTab] = useState('description');
   const [langMenuOpen, setLangMenuOpen] = useState(false);
+  // 'saving' | 'saved' | null
+  const [saveStatus, setSaveStatus] = useState(null);
 
+  // Refs for debounce timer and latest values (avoids stale closures)
+  const saveTimerRef = useRef(null);
+  const savedIndicatorTimerRef = useRef(null);
+  const langRef = useRef(language);
+  useEffect(() => { langRef.current = language; }, [language]);
+
+  // ── Auto-save function ──────────────────────────────────────────────────────
+  const saveCode = useCallback(async (codeToSave, langToSave) => {
+    if (!id) return;
+    setSaveStatus('saving');
+    try {
+      await axios.put(
+        `${API}/api/user-code/${id}`,
+        { code: codeToSave, language: langToSave },
+        { withCredentials: true }
+      );
+      setSaveStatus('saved');
+      // Clear the 'saved' indicator after 3 s
+      if (savedIndicatorTimerRef.current) clearTimeout(savedIndicatorTimerRef.current);
+      savedIndicatorTimerRef.current = setTimeout(() => setSaveStatus(null), 3000);
+    } catch {
+      setSaveStatus(null); // silently ignore (user may not be logged in)
+    }
+  }, [id]);
+
+  // Cleanup timers on unmount
   useEffect(() => {
-    axios.get(`${API}/api/problems/${id}`, { withCredentials: true })
-      .then(res => {
-        setProblem(res.data);
-        setCode(res.data.starter_code || DEFAULT_CODE.verilog);
-      })
-      .catch(() => navigate('/problems'))
-      .finally(() => setLoading(false));
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (savedIndicatorTimerRef.current) clearTimeout(savedIndicatorTimerRef.current);
+    };
+  }, []);
+
+  // ── Initial data load: problem + saved code in parallel ──────────────────
+  useEffect(() => {
+    setLoading(true);
+    Promise.allSettled([
+      axios.get(`${API}/api/problems/${id}`, { withCredentials: true }),
+      axios.get(`${API}/api/user-code/${id}`, { withCredentials: true }),
+    ]).then(([problemRes, savedCodeRes]) => {
+      if (problemRes.status === 'rejected') {
+        navigate('/problems');
+        return;
+      }
+      const prob = problemRes.value.data;
+      setProblem(prob);
+
+      // Prefer user's saved code; fall back to starter_code then DEFAULT_CODE
+      if (savedCodeRes.status === 'fulfilled' && savedCodeRes.value.data?.code) {
+        setCode(savedCodeRes.value.data.code);
+        if (savedCodeRes.value.data.language) {
+          setLanguage(savedCodeRes.value.data.language);
+          langRef.current = savedCodeRes.value.data.language;
+        }
+      } else {
+        setCode(prob.starter_code || DEFAULT_CODE.verilog);
+      }
+    }).finally(() => setLoading(false));
   }, [id, navigate]);
 
+  // ── Editor change: update state + schedule debounced save ─────────────────
+  const handleCodeChange = useCallback((val) => {
+    const newCode = val || '';
+    setCode(newCode);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveCode(newCode, langRef.current);
+    }, 2500);
+  }, [saveCode]);
+
+  // ── Language change ───────────────────────────────────────────────────────
   const handleLanguageChange = (lang) => {
     setLanguage(lang);
+    langRef.current = lang;
     setLangMenuOpen(false);
     const isDefault = Object.values(DEFAULT_CODE).some(d => code.trim() === d.trim());
     if (isDefault) {
@@ -276,7 +340,15 @@ export default function ProblemDetailPage() {
     }
   };
 
+  // ── Submit ────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
+    // Flush any pending debounced save immediately
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    saveCode(code, language); // fire-and-forget persist on submit
+
     setSubmitting(true);
     setResult(null);
     setActiveTab('result');
@@ -544,14 +616,30 @@ export default function ProblemDetailPage() {
                 </div>
               )}
             </div>
-            <button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="flex items-center gap-2 bg-[#4A8FE8] hover:bg-[#3B7ACC] disabled:opacity-60 text-white text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors"
-            >
-              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-              {submitting ? 'Running...' : 'Submit'}
-            </button>
+
+            {/* Save Status Indicator */}
+            <div className="flex items-center gap-3">
+              {saveStatus === 'saving' && (
+                <span className="flex items-center gap-1.5 text-xs text-[#7A8FA8]">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Saving…
+                </span>
+              )}
+              {saveStatus === 'saved' && (
+                <span className="flex items-center gap-1.5 text-xs text-[#22C55E]">
+                  <CheckCircle className="w-3 h-3" />
+                  Saved
+                </span>
+              )}
+              <button
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="flex items-center gap-2 bg-[#4A8FE8] hover:bg-[#3B7ACC] disabled:opacity-60 text-white text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors"
+              >
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                {submitting ? 'Running...' : 'Submit'}
+              </button>
+            </div>
           </div>
 
           {/* Monaco Editor */}
@@ -560,7 +648,7 @@ export default function ProblemDetailPage() {
               height="100%"
               language={LANGUAGES.find(l => l.value === language)?.monacoLang || 'verilog'}
               value={code}
-              onChange={val => setCode(val || '')}
+              onChange={handleCodeChange}
               theme="vs-dark"
               options={{
                 fontSize: 14,
