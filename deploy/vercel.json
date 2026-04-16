@@ -1,9 +1,9 @@
 {
   "version": 2,
   "name": "vlsi-forge",
-  "buildCommand": "yarn build",
+  "buildCommand": "npm run build",
   "outputDirectory": "build",
-  "installCommand": "yarn install",
+  "installCommand": "npm install --legacy-peer-deps",
   "framework": "create-react-app",
   "rewrites": [
     {
