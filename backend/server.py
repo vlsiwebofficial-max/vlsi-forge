@@ -69,6 +69,20 @@ class DifficultyLevel(str, Enum):
     HARD = "Hard"
     VERY_HARD = "Very Hard"
 
+class DomainType(str, Enum):
+    RTL_DESIGN = "RTL Design"
+    DESIGN_VERIFICATION = "Design Verification"
+    COMPUTER_ARCHITECTURE = "Computer Architecture"
+    DEBUG_ANALYSIS = "Debug & Analysis"
+    PROGRAMMING = "Programming"
+
+# Canonical company ticker list
+KNOWN_COMPANIES = [
+    "NVIDIA", "Intel", "Qualcomm", "AMD", "Apple",
+    "Arm", "Cadence", "Synopsys", "MediaTek", "Broadcom",
+    "Samsung", "TSMC", "Marvell", "Micron"
+]
+
 class UserRole(str, Enum):
     USER = "user"
     ADMIN = "admin"
@@ -136,6 +150,8 @@ class Problem(BaseModel):
     description: str
     difficulty: DifficultyLevel
     tags: List[str]
+    domain: Optional[str] = None       # one of DomainType values
+    companies: Optional[List[str]] = []  # e.g. ["NVIDIA", "Intel"]
     constraints: str
     starter_code: str
     testbench_template: str
@@ -149,6 +165,8 @@ class ProblemCreate(BaseModel):
     description: str
     difficulty: DifficultyLevel
     tags: List[str]
+    domain: Optional[str] = None
+    companies: Optional[List[str]] = []
     constraints: str
     starter_code: str
     testbench_template: str
@@ -158,6 +176,8 @@ class ProblemUpdate(BaseModel):
     description: Optional[str] = None
     difficulty: Optional[DifficultyLevel] = None
     tags: Optional[List[str]] = None
+    domain: Optional[str] = None
+    companies: Optional[List[str]] = None
     constraints: Optional[str] = None
     starter_code: Optional[str] = None
     testbench_template: Optional[str] = None
@@ -221,6 +241,8 @@ async def create_indexes():
         await db.users.create_index("user_id", unique=True)
         await db.problems.create_index("problem_id", unique=True)
         await db.problems.create_index([("difficulty", 1), ("tags", 1)])
+        await db.problems.create_index("domain")
+        await db.problems.create_index("companies")
         await db.submissions.create_index("submission_id", unique=True)
         await db.submissions.create_index([("user_id", 1), ("submitted_at", -1)])
         await db.submissions.create_index([("problem_id", 1), ("status", 1)])
@@ -1031,14 +1053,20 @@ async def get_problems(
     request: Request,
     difficulty: Optional[str] = None,
     tag: Optional[str] = None,
+    domain: Optional[str] = None,
+    company: Optional[str] = None,
     skip: int = 0,
-    limit: int = 100
+    limit: int = 200
 ):
     query: dict = {}
     if difficulty:
         query["difficulty"] = difficulty
     if tag:
         query["tags"] = tag
+    if domain:
+        query["domain"] = domain
+    if company:
+        query["companies"] = company
 
     problems = await db.problems.find(query, {"_id": 0, "testcases": 0}).skip(skip).limit(limit).to_list(limit)
     return [_coerce_problem_dates(p) for p in problems]
@@ -1448,6 +1476,51 @@ async def get_user_stats(request: Request):
     }
 
 
+@api_router.get("/stats/solved-problems")
+async def get_solved_problems(request: Request):
+    """
+    Returns the set of problem IDs the current user has solved (status=passed),
+    plus a per-domain breakdown. Used by the Problems page to show solved indicators.
+    """
+    user = await require_auth(request)
+
+    pipeline = [
+        {"$match": {"user_id": user.user_id, "status": "passed"}},
+        # Deduplicate by problem_id — keep one doc per unique solved problem
+        {"$group": {"_id": "$problem_id"}},
+        # Join with problems to get domain info
+        {"$lookup": {
+            "from": "problems",
+            "localField": "_id",
+            "foreignField": "problem_id",
+            "as": "problem_info"
+        }},
+        {"$unwind": {"path": "$problem_info", "preserveNullAndEmptyArrays": True}},
+        {"$project": {
+            "_id": 0,
+            "problem_id": "$_id",
+            "domain": "$problem_info.domain",
+            "difficulty": "$problem_info.difficulty"
+        }}
+    ]
+
+    solved_docs = await db.submissions.aggregate(pipeline).to_list(1000)
+
+    solved_ids = [d["problem_id"] for d in solved_docs]
+
+    # Per-domain counts
+    domain_solved: Dict[str, int] = {}
+    for d in solved_docs:
+        dom = d.get("domain") or "Uncategorized"
+        domain_solved[dom] = domain_solved.get(dom, 0) + 1
+
+    return {
+        "solved_ids": solved_ids,
+        "domain_solved": domain_solved,
+        "total_solved": len(solved_ids)
+    }
+
+
 # ==================== ADMIN ROUTES (Paginated) ====================
 
 @api_router.get("/admin/users")
@@ -1478,6 +1551,8 @@ SEED_PROBLEMS = [
     {
         "title": "Half Adder",
         "difficulty": "Easy",
+        "domain": "RTL Design",
+        "companies": ["Intel", "Qualcomm"],
         "tags": ["combinational", "arithmetic"],
         "description": "Design a half adder with inputs `a`, `b` and outputs `sum`, `carry`.\n\n**Truth Table:**\n| a | b | sum | carry |\n|---|---|-----|-------|\n| 0 | 0 |  0  |   0   |\n| 0 | 1 |  1  |   0   |\n| 1 | 0 |  1  |   0   |\n| 1 | 1 |  0  |   1   |",
         "constraints": "- Use only combinational logic\n- No clock or reset required",
@@ -1493,6 +1568,8 @@ SEED_PROBLEMS = [
     {
         "title": "2-to-1 Multiplexer",
         "difficulty": "Easy",
+        "domain": "RTL Design",
+        "companies": ["Qualcomm", "AMD"],
         "tags": ["combinational", "mux"],
         "description": "Implement a 2-to-1 multiplexer.\n- When `sel=0`, output `a`\n- When `sel=1`, output `b`",
         "constraints": "- Single-bit inputs and output",
@@ -1507,6 +1584,8 @@ SEED_PROBLEMS = [
     {
         "title": "D Flip-Flop (Sync Reset)",
         "difficulty": "Medium",
+        "domain": "RTL Design",
+        "companies": ["NVIDIA", "Intel", "ARM"],
         "tags": ["sequential", "flip-flop"],
         "description": "Design a positive-edge-triggered D flip-flop with **synchronous active-high reset**.\n\n- On rising clock edge: if `rst=1`, set `q=0`; else `q=d`",
         "constraints": "- Synchronous reset only\n- Positive edge triggered",
