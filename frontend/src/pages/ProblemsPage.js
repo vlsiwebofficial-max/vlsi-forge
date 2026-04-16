@@ -195,7 +195,7 @@ export default function ProblemsPage() {
               Domains
             </p>
             {DOMAINS.map(domain => {
-              const { id, label, subtitle, color, Icon } = domain;
+              const { id, label, color, Icon } = domain;
               const isActive = activeDomain === id;
               const total = id === 'all' ? totalProblems : (domainCounts[id] || 0);
               const solved = id === 'all' ? totalSolved : (domainSolved[id] || 0);

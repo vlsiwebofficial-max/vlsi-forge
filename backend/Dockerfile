@@ -15,7 +15,12 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # ── 1. System packages ────────────────────────────────────────────────────────
+# Enable universe repo first — required for ghdl on Ubuntu 22.04
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
+    && add-apt-repository universe \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
     python3.11 \
     python3.11-venv \
     python3-pip \
@@ -27,7 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Verify simulation tools are installed
-RUN iverilog -V 2>&1 | head -1 && verilator --version 2>&1 | head -1 && ghdl --version 2>&1 | head -1
+RUN iverilog -V 2>&1 | head -1 && verilator --version 2>&1 | head -1 && (ghdl --version 2>&1 | head -1 || echo "ghdl not available — VHDL disabled")
 
 # ── 2. Create non-root user (security best practice) ─────────────────────────
 RUN useradd -m -u 1001 -s /bin/bash appuser
