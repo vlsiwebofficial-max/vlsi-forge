@@ -266,6 +266,24 @@ async def create_indexes():
     except Exception as e:
         logger.warning(f"Index creation warning (may already exist): {e}")
 
+@app.on_event("startup")
+async def seed_extended_problems_on_startup():
+    """Idempotently upsert EXTENDED_PROBLEMS into the DB on every deploy."""
+    try:
+        inserted = 0
+        for p in EXTENDED_PROBLEMS:
+            existing = await db.problems.find_one({"title": p["title"]})
+            if not existing:
+                doc = {**p, "problem_id": str(uuid.uuid4())}
+                await db.problems.insert_one(doc)
+                inserted += 1
+        if inserted:
+            logger.info(f"Seeded {inserted} extended problems on startup")
+        else:
+            logger.info("Extended problems already seeded — skipping")
+    except Exception as e:
+        logger.warning(f"Extended problems seeding warning: {e}")
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
