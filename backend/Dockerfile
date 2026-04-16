@@ -15,11 +15,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # ── 1. System packages ────────────────────────────────────────────────────────
-# Directly enable universe repo (avoids software-properties-common + add-apt-repository
-# which can hang in non-interactive Docker builds on Railway)
-RUN echo "deb http://archive.ubuntu.com/ubuntu jammy universe" >> /etc/apt/sources.list \
-    && echo "deb http://archive.ubuntu.com/ubuntu jammy-updates universe" >> /etc/apt/sources.list \
-    && apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11 \
     python3.11-venv \
     python3-pip \
@@ -27,10 +23,9 @@ RUN echo "deb http://archive.ubuntu.com/ubuntu jammy universe" >> /etc/apt/sourc
     verilator \
     curl \
     ca-certificates \
-    && apt-get install -y --no-install-recommends ghdl || echo "WARNING: ghdl unavailable — VHDL support disabled" \
     && rm -rf /var/lib/apt/lists/*
 
-# Verify core simulation tools are installed
+# Verify simulation tools are present
 RUN iverilog -V 2>&1 | head -1 && verilator --version 2>&1 | head -1
 
 # ── 2. Create non-root user (security best practice) ─────────────────────────
