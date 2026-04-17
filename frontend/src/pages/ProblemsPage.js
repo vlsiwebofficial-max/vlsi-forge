@@ -5,14 +5,12 @@ import { API } from '../App';
 import Navbar from '../components/Navbar';
 import { Search, ChevronRight, CheckCircle2, Circle } from 'lucide-react';
 
-// ─── Domain config — VLSI Forge palette ─────────────────────────────────────
+// ─── Domain config ──────────────────────────────────────────────────────────
 const DOMAINS = [
   {
     id: 'all',
     label: 'All Problems',
-    subtitle: 'Full problem bank',
-    color: '#E8EDF4',
-    accent: '#4A8FE8',
+    color: '#111111',
     Icon: () => (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
         <rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4"/>
@@ -25,9 +23,7 @@ const DOMAINS = [
   {
     id: 'RTL Design',
     label: 'RTL Design',
-    subtitle: 'Circuits & modules',
-    color: '#4A8FE8',
-    accent: '#4A8FE8',
+    color: '#2563EB',
     Icon: () => (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
         <path d="M1 7 H4 V4 H10 V10 H4 V7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
@@ -38,9 +34,7 @@ const DOMAINS = [
   {
     id: 'Design Verification',
     label: 'Design Verification',
-    subtitle: 'Testbenches & assertions',
-    color: '#22C55E',
-    accent: '#22C55E',
+    color: '#16A34A',
     Icon: () => (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
         <path d="M2 7.5 L5.5 11 L12 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
@@ -50,23 +44,19 @@ const DOMAINS = [
   {
     id: 'Computer Architecture',
     label: 'Computer Architecture',
-    subtitle: 'Pipelines & memory',
-    color: '#A855F7',
-    accent: '#A855F7',
+    color: '#9333EA',
     Icon: () => (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
         <rect x="3" y="3" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="1.4"/>
         <rect x="5" y="5" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.2"/>
-        <path d="M5 1 V3 M9 1 V3 M5 11 V13 M9 11 V13 M1 5 H3 M1 9 H3 M11 5 H13 M11 9 H13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+        <path d="M5 1V3M9 1V3M5 11V13M9 11V13M1 5H3M1 9H3M11 5H13M11 9H13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
       </svg>
     ),
   },
   {
     id: 'Debug & Analysis',
     label: 'Debug & Analysis',
-    subtitle: 'Waveforms & bug hunts',
-    color: '#F59E0B',
-    accent: '#F59E0B',
+    color: '#D97706',
     Icon: () => (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
         <path d="M1 9 L3.5 4.5 L6 8 L8.5 3 L11 7 L13 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -76,9 +66,7 @@ const DOMAINS = [
   {
     id: 'Programming',
     label: 'Programming',
-    subtitle: 'C++ & algorithms',
-    color: '#EC4899',
-    accent: '#EC4899',
+    color: '#DB2777',
     Icon: () => (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
         <path d="M5 3 L2 7 L5 11 M9 3 L12 7 L9 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -87,7 +75,6 @@ const DOMAINS = [
   },
 ];
 
-// Company abbreviation map
 const CO_ABBR = {
   NVIDIA: 'NVDA', Intel: 'INTC', Qualcomm: 'QCOM', AMD: 'AMD',
   Apple: 'AAPL', Arm: 'ARM', Cadence: 'CDNS', Synopsys: 'SNPS',
@@ -96,30 +83,23 @@ const CO_ABBR = {
 };
 
 const DIFF_STYLE = {
-  Easy: 'text-[#22C55E] bg-[#22C55E]/10 border-[#22C55E]/25',
-  Medium: 'text-[#F59E0B] bg-[#F59E0B]/10 border-[#F59E0B]/25',
-  Hard: 'text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/25',
-  'Very Hard': 'text-[#A855F7] bg-[#A855F7]/10 border-[#A855F7]/25',
+  Easy:      { text: 'text-[#16A34A]', bg: 'bg-[#F0FDF4]', border: 'border-[#BBF7D0]' },
+  Medium:    { text: 'text-[#D97706]', bg: 'bg-[#FFFBEB]', border: 'border-[#FDE68A]' },
+  Hard:      { text: 'text-[#DC2626]', bg: 'bg-[#FEF2F2]', border: 'border-[#FECACA]' },
+  'Very Hard': { text: 'text-[#9333EA]', bg: 'bg-[#FAF5FF]', border: 'border-[#E9D5FF]' },
 };
 
-const ALL_COMPANIES = [
-  'NVIDIA', 'Intel', 'Qualcomm', 'AMD', 'Apple', 'Arm', 'Cadence', 'Synopsys', 'Broadcom',
-];
+const ALL_COMPANIES = ['NVIDIA', 'Intel', 'Qualcomm', 'AMD', 'Arm', 'Cadence', 'Synopsys', 'Broadcom'];
 
-// ─── Mini progress bar ───────────────────────────────────────────────────────
 function ProgressBar({ value, max, color }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
-    <div className="h-1 rounded-full bg-[#1E2530] overflow-hidden mt-1.5">
-      <div
-        className="h-full rounded-full transition-all duration-500"
-        style={{ width: `${pct}%`, backgroundColor: color }}
-      />
+    <div className="h-1 rounded-full bg-[#F0F0F0] overflow-hidden mt-1.5">
+      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: color }} />
     </div>
   );
 }
 
-// ─── Main Page ───────────────────────────────────────────────────────────────
 export default function ProblemsPage() {
   const [problems, setProblems] = useState([]);
   const [solvedIds, setSolvedIds] = useState(new Set());
@@ -139,9 +119,7 @@ export default function ProblemsPage() {
           axios.get(`${API}/api/problems`, { withCredentials: true }),
           axios.get(`${API}/api/stats/solved-problems`, { withCredentials: true }),
         ]);
-        if (problemsRes.status === 'fulfilled') {
-          setProblems(problemsRes.value.data);
-        }
+        if (problemsRes.status === 'fulfilled') setProblems(problemsRes.value.data);
         if (solvedRes.status === 'fulfilled') {
           setSolvedIds(new Set(solvedRes.value.data.solved_ids || []));
           setDomainSolved(solvedRes.value.data.domain_solved || {});
@@ -153,17 +131,12 @@ export default function ProblemsPage() {
     fetchData();
   }, []);
 
-  // Compute domain counts from problems list
   const domainCounts = useMemo(() => {
     const counts = {};
-    problems.forEach(p => {
-      const d = p.domain || 'Uncategorized';
-      counts[d] = (counts[d] || 0) + 1;
-    });
+    problems.forEach(p => { const d = p.domain || 'Uncategorized'; counts[d] = (counts[d] || 0) + 1; });
     return counts;
   }, [problems]);
 
-  // Filtered problem list
   const filtered = useMemo(() => {
     return problems.filter(p => {
       if (activeDomain !== 'all' && p.domain !== activeDomain) return false;
@@ -184,14 +157,14 @@ export default function ProblemsPage() {
   const totalProblems = problems.length;
 
   return (
-    <div className="min-h-screen bg-[#0A0E14]">
+    <div className="min-h-screen bg-white">
       <Navbar />
       <div className="flex" style={{ minHeight: 'calc(100vh - 56px)' }}>
 
-        {/* ── Left sidebar — Domain Explorer ─────────────────────────── */}
-        <aside className="hidden lg:flex flex-col w-56 xl:w-60 shrink-0 border-r border-[#1E2530] bg-[#0D1117] sticky top-[56px] h-[calc(100vh-56px)] overflow-y-auto">
+        {/* ── Left sidebar ────────────────────────────────────────── */}
+        <aside className="hidden lg:flex flex-col w-52 xl:w-56 shrink-0 border-r border-[#E8E8E8] bg-[#FAFAFA] sticky top-[56px] h-[calc(100vh-56px)] overflow-y-auto">
           <div className="px-3 pt-5 pb-2">
-            <p className="text-[9px] font-semibold tracking-[0.12em] text-[#4A5568] uppercase px-2 mb-3">
+            <p className="text-[9px] font-semibold tracking-[0.14em] text-[#AAAAAA] uppercase px-2 mb-2">
               Domains
             </p>
             {DOMAINS.map(domain => {
@@ -204,34 +177,28 @@ export default function ProblemsPage() {
                 <button
                   key={id}
                   onClick={() => setActiveDomain(id)}
-                  className={`w-full text-left px-3 py-2.5 rounded-lg mb-0.5 transition-all group ${
-                    isActive
-                      ? 'bg-[#13171E] border border-[#1E2530]'
-                      : 'hover:bg-[#13171E]/60'
+                  className={`w-full text-left px-2.5 py-2 rounded-lg mb-0.5 transition-all group ${
+                    isActive ? 'bg-white border border-[#E8E8E8] shadow-sm' : 'hover:bg-white'
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
-                    <span style={{ color: isActive ? color : '#4A5568' }} className="transition-colors group-hover:text-current shrink-0">
+                    <span style={{ color: isActive ? color : '#CCCCCC' }} className="transition-colors shrink-0">
                       <Icon />
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <span className={`text-xs font-medium truncate transition-colors ${
-                          isActive ? 'text-[#E8EDF4]' : 'text-[#7A8FA8] group-hover:text-[#C8D4E0]'
+                          isActive ? 'text-[#111111]' : 'text-[#888888] group-hover:text-[#444444]'
                         }`}>
                           {label}
                         </span>
                         {total > 0 && (
-                          <span className={`text-[10px] font-mono ml-1 shrink-0 ${
-                            isActive ? 'text-[#7A8FA8]' : 'text-[#4A5568]'
-                          }`}>
+                          <span className={`text-[10px] font-mono ml-1 shrink-0 ${isActive ? 'text-[#888888]' : 'text-[#CCCCCC]'}`}>
                             {solved}/{total}
                           </span>
                         )}
                       </div>
-                      {total > 0 && id !== 'all' && (
-                        <ProgressBar value={solved} max={total} color={color} />
-                      )}
+                      {total > 0 && id !== 'all' && <ProgressBar value={solved} max={total} color={color} />}
                     </div>
                   </div>
                 </button>
@@ -239,149 +206,127 @@ export default function ProblemsPage() {
             })}
           </div>
 
-          {/* Divider + Difficulty Quick Filter */}
-          <div className="px-3 mt-4 pb-5 border-t border-[#1E2530] pt-4">
-            <p className="text-[9px] font-semibold tracking-[0.12em] text-[#4A5568] uppercase px-2 mb-2">
+          {/* Difficulty filter */}
+          <div className="px-3 mt-4 pb-5 border-t border-[#E8E8E8] pt-4">
+            <p className="text-[9px] font-semibold tracking-[0.14em] text-[#AAAAAA] uppercase px-2 mb-2">
               Difficulty
             </p>
             {['All', 'Easy', 'Medium', 'Hard'].map(d => {
-              const color = d === 'Easy' ? '#22C55E' : d === 'Medium' ? '#F59E0B' : d === 'Hard' ? '#EF4444' : '#E8EDF4';
-              const count = d === 'All' ? totalProblems : problems.filter(p => p.difficulty === d && (activeDomain === 'all' || p.domain === activeDomain)).length;
+              const s = DIFF_STYLE[d] || {};
+              const isActive = diff === d;
+              const count = d === 'All'
+                ? totalProblems
+                : problems.filter(p => p.difficulty === d && (activeDomain === 'all' || p.domain === activeDomain)).length;
               return (
                 <button
                   key={d}
                   onClick={() => setDiff(d)}
-                  className={`w-full text-left px-3 py-1.5 rounded-lg mb-0.5 flex items-center justify-between transition-colors ${
-                    diff === d ? 'bg-[#13171E]' : 'hover:bg-[#13171E]/60'
+                  className={`w-full text-left px-2.5 py-1.5 rounded-lg mb-0.5 flex items-center justify-between transition-colors ${
+                    isActive ? 'bg-white border border-[#E8E8E8]' : 'hover:bg-white'
                   }`}
                 >
-                  <span className="text-xs" style={{ color: diff === d ? color : '#7A8FA8' }}>{d}</span>
-                  <span className="text-[10px] font-mono text-[#4A5568]">{count}</span>
+                  <span className={`text-xs font-medium ${isActive && d !== 'All' ? s.text : isActive ? 'text-[#111111]' : 'text-[#888888]'}`}>
+                    {d}
+                  </span>
+                  <span className="text-[10px] font-mono text-[#CCCCCC]">{count}</span>
                 </button>
               );
             })}
           </div>
         </aside>
 
-        {/* ── Main content ────────────────────────────────────────────── */}
+        {/* ── Main content ────────────────────────────────────────── */}
         <main className="flex-1 flex flex-col min-w-0">
           {/* Page header */}
-          <div className="px-6 pt-7 pb-4 border-b border-[#1E2530]">
-            <div className="flex items-end justify-between flex-wrap gap-3">
+          <div className="px-6 pt-6 pb-4 border-b border-[#E8E8E8] bg-white">
+            <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
               <div>
-                {/* Domain breadcrumb */}
-                <div className="flex items-center gap-1.5 mb-1">
-                  {activeDomain !== 'all' && (
-                    <>
-                      <button onClick={() => setActiveDomain('all')} className="text-xs text-[#4A5568] hover:text-[#7A8FA8] transition-colors">All</button>
-                      <span className="text-[#2A3240] text-xs">/</span>
-                    </>
-                  )}
-                  <span className="text-xs font-medium" style={{
-                    color: DOMAINS.find(d => d.id === activeDomain)?.color || '#E8EDF4'
-                  }}>
-                    {DOMAINS.find(d => d.id === activeDomain)?.label || 'All Problems'}
-                  </span>
-                </div>
-                <h1 className="text-xl font-bold text-[#E8EDF4] tracking-tight">
-                  {activeDomain === 'all'
-                    ? 'Problems'
-                    : DOMAINS.find(d => d.id === activeDomain)?.label}
+                <h1 className="text-xl font-bold text-[#111111] tracking-tight">
+                  {activeDomain === 'all' ? 'Problems' : DOMAINS.find(d => d.id === activeDomain)?.label}
                 </h1>
-                <p className="text-xs text-[#4A5568] mt-0.5">
-                  {DOMAINS.find(d => d.id === activeDomain)?.subtitle}
+                <p className="text-sm text-[#888888] mt-0.5">
+                  {totalSolved > 0
+                    ? `${totalSolved} of ${totalProblems} solved · ${Math.round((totalSolved / totalProblems) * 100)}% complete`
+                    : `${totalProblems} problems available`}
                 </p>
               </div>
-
-              {/* Stat chips */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="flex items-center gap-1.5 text-xs text-[#7A8FA8] bg-[#13171E] border border-[#1E2530] rounded-lg px-3 py-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]"></span>
-                  {totalSolved} solved
-                </span>
-                <span className="text-xs text-[#7A8FA8] bg-[#13171E] border border-[#1E2530] rounded-lg px-3 py-1.5">
-                  {totalProblems} total
-                </span>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <div
+                    onClick={() => setHideSolved(h => !h)}
+                    className={`w-8 h-4.5 rounded-full border transition-all relative cursor-pointer ${
+                      hideSolved ? 'bg-[#111111] border-[#111111]' : 'bg-[#F0F0F0] border-[#E8E8E8]'
+                    }`}
+                    style={{ width: 32, height: 18 }}
+                  >
+                    <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-all shadow-sm ${
+                      hideSolved ? 'left-[14px]' : 'left-[2px]'
+                    }`} />
+                  </div>
+                  <span className="text-xs text-[#888888] whitespace-nowrap font-medium">Hide solved</span>
+                </label>
               </div>
             </div>
 
-            {/* Search + company chips */}
-            <div className="mt-4 space-y-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#4A5568]" />
-                <input
-                  type="text"
-                  placeholder="Search by title, tag, or domain..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="w-full bg-[#0D1117] border border-[#1E2530] rounded-lg pl-9 pr-4 py-2 text-sm text-[#E8EDF4] placeholder-[#4A5568] focus:outline-none focus:border-[#4A8FE8]/50 transition-colors"
-                />
-              </div>
+            {/* Search */}
+            <div className="relative mb-3">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#CCCCCC]" />
+              <input
+                type="text"
+                placeholder="Search problems, tags, domains…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="w-full bg-[#FAFAFA] border border-[#E8E8E8] rounded-lg pl-9 pr-4 py-2 text-sm text-[#111111] placeholder-[#CCCCCC] focus:outline-none focus:border-[#111111] focus:ring-1 focus:ring-[#111111] transition-all"
+              />
+            </div>
 
-              {/* Company filter + hide solved */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-semibold tracking-widest text-[#4A5568] uppercase shrink-0">Companies</span>
+            {/* Company chips */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[9px] font-semibold tracking-widest text-[#AAAAAA] uppercase shrink-0 mr-1">Companies</span>
+              <button
+                onClick={() => setActiveCompany(null)}
+                className={`text-[11px] font-mono px-2 py-0.5 rounded border transition-colors ${
+                  activeCompany === null
+                    ? 'border-[#111111] bg-[#111111] text-white'
+                    : 'border-[#E8E8E8] bg-[#FAFAFA] text-[#888888] hover:border-[#D0D0D0] hover:text-[#444444]'
+                }`}
+              >
+                ALL
+              </button>
+              {ALL_COMPANIES.map(co => (
                 <button
-                  onClick={() => setActiveCompany(null)}
-                  className={`text-[11px] font-mono px-2.5 py-1 rounded-md border transition-colors ${
-                    activeCompany === null
-                      ? 'border-[#4A8FE8]/40 bg-[#4A8FE8]/10 text-[#4A8FE8]'
-                      : 'border-[#1E2530] bg-[#0D1117] text-[#4A5568] hover:text-[#7A8FA8]'
+                  key={co}
+                  onClick={() => setActiveCompany(activeCompany === co ? null : co)}
+                  className={`text-[11px] font-mono px-2 py-0.5 rounded border transition-colors ${
+                    activeCompany === co
+                      ? 'border-[#111111] bg-[#111111] text-white'
+                      : 'border-[#E8E8E8] bg-[#FAFAFA] text-[#888888] hover:border-[#D0D0D0] hover:text-[#444444]'
                   }`}
+                  title={co}
                 >
-                  ALL
+                  {CO_ABBR[co] || co}
                 </button>
-                {ALL_COMPANIES.map(co => (
-                  <button
-                    key={co}
-                    onClick={() => setActiveCompany(activeCompany === co ? null : co)}
-                    className={`text-[11px] font-mono px-2.5 py-1 rounded-md border transition-colors ${
-                      activeCompany === co
-                        ? 'border-[#4A8FE8]/40 bg-[#4A8FE8]/10 text-[#4A8FE8]'
-                        : 'border-[#1E2530] bg-[#0D1117] text-[#4A5568] hover:text-[#7A8FA8] hover:border-[#2A3240]'
-                    }`}
-                  >
-                    {CO_ABBR[co] || co}
-                  </button>
-                ))}
-                <div className="ml-auto flex items-center gap-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <div
-                      onClick={() => setHideSolved(h => !h)}
-                      className={`w-7 h-4 rounded-full border transition-colors relative cursor-pointer ${
-                        hideSolved
-                          ? 'bg-[#22C55E]/20 border-[#22C55E]/40'
-                          : 'bg-[#0D1117] border-[#1E2530]'
-                      }`}
-                    >
-                      <div className={`absolute top-0.5 w-3 h-3 rounded-full transition-all ${
-                        hideSolved ? 'left-3.5 bg-[#22C55E]' : 'left-0.5 bg-[#4A5568]'
-                      }`} />
-                    </div>
-                    <span className="text-[11px] text-[#4A5568] whitespace-nowrap">Hide solved</span>
-                  </label>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
 
           {/* Problem table */}
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto bg-white">
             {loading ? (
-              <div className="p-6 space-y-2">
-                {[...Array(8)].map((_, i) => (
-                  <div key={i} className="h-11 rounded-lg bg-[#13171E] animate-pulse" style={{ opacity: 1 - i * 0.1 }} />
+              <div className="p-5 space-y-2">
+                {[...Array(10)].map((_, i) => (
+                  <div key={i} className="h-12 rounded-lg bg-[#F5F5F5] animate-pulse" style={{ opacity: 1 - i * 0.08 }} />
                 ))}
               </div>
             ) : filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-24 text-center">
-                <div className="w-12 h-12 rounded-full bg-[#13171E] border border-[#1E2530] flex items-center justify-center mb-4">
-                  <Search className="w-5 h-5 text-[#4A5568]" />
+              <div className="flex flex-col items-center justify-center py-28 text-center">
+                <div className="w-11 h-11 rounded-full bg-[#F5F5F5] flex items-center justify-center mb-4">
+                  <Search className="w-5 h-5 text-[#CCCCCC]" />
                 </div>
-                <p className="text-[#7A8FA8] text-sm font-medium">No problems match your filters</p>
+                <p className="text-[#888888] text-sm font-medium">No problems match your filters</p>
                 <button
                   onClick={() => { setSearch(''); setDiff('All'); setActiveCompany(null); setActiveDomain('all'); setHideSolved(false); }}
-                  className="mt-3 text-xs text-[#4A8FE8] hover:underline"
+                  className="mt-3 text-xs text-[#555555] hover:text-[#111111] hover:underline font-medium transition-colors"
                 >
                   Clear all filters
                 </button>
@@ -389,46 +334,43 @@ export default function ProblemsPage() {
             ) : (
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-[#1E2530] bg-[#0D1117] sticky top-0 z-10">
-                    <th className="px-4 py-3 text-left w-8">
-                      <span className="text-[10px] font-semibold tracking-widest text-[#4A5568] uppercase">#</span>
+                  <tr className="border-b border-[#F0F0F0] bg-[#FAFAFA] sticky top-0 z-10">
+                    <th className="px-5 py-3 text-left w-10">
+                      <span className="text-[9px] font-semibold tracking-widest text-[#CCCCCC] uppercase">#</span>
                     </th>
                     <th className="px-4 py-3 text-left">
-                      <span className="text-[10px] font-semibold tracking-widest text-[#4A5568] uppercase">Problem</span>
+                      <span className="text-[9px] font-semibold tracking-widest text-[#CCCCCC] uppercase">Problem</span>
                     </th>
                     <th className="px-4 py-3 text-left hidden md:table-cell">
-                      <span className="text-[10px] font-semibold tracking-widest text-[#4A5568] uppercase">Domain</span>
+                      <span className="text-[9px] font-semibold tracking-widest text-[#CCCCCC] uppercase">Domain</span>
                     </th>
                     <th className="px-4 py-3 text-left hidden sm:table-cell">
-                      <span className="text-[10px] font-semibold tracking-widest text-[#4A5568] uppercase">Difficulty</span>
+                      <span className="text-[9px] font-semibold tracking-widest text-[#CCCCCC] uppercase">Difficulty</span>
                     </th>
                     <th className="px-4 py-3 text-left hidden lg:table-cell">
-                      <span className="text-[10px] font-semibold tracking-widest text-[#4A5568] uppercase">Companies</span>
+                      <span className="text-[9px] font-semibold tracking-widest text-[#CCCCCC] uppercase">Companies</span>
                     </th>
-                    <th className="w-8"></th>
+                    <th className="w-8" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#0F1419]">
+                <tbody>
                   {filtered.map((p, idx) => {
                     const solved = solvedIds.has(p.problem_id);
                     const dom = DOMAINS.find(d => d.id === p.domain);
-                    const domColor = dom?.color || '#4A5568';
+                    const domColor = dom?.color || '#888888';
+                    const ds = DIFF_STYLE[p.difficulty] || {};
 
                     return (
                       <tr
                         key={p.problem_id}
-                        className={`group transition-colors ${
-                          solved ? 'hover:bg-[#0F1A14]' : 'hover:bg-[#0D1117]'
-                        }`}
+                        className="group border-b border-[#F5F5F5] hover:bg-[#FAFAFA] transition-colors"
                       >
-                        {/* # + solved indicator */}
-                        <td className="px-4 py-3.5 w-10">
-                          <div className="flex items-center gap-2">
-                            {solved
-                              ? <CheckCircle2 className="w-3.5 h-3.5 text-[#22C55E] shrink-0" />
-                              : <Circle className="w-3.5 h-3.5 text-[#2A3240] shrink-0" />
-                            }
-                          </div>
+                        {/* Status */}
+                        <td className="px-5 py-3.5 w-10">
+                          {solved
+                            ? <CheckCircle2 className="w-4 h-4 text-[#16A34A]" />
+                            : <Circle className="w-4 h-4 text-[#E0E0E0]" />
+                          }
                         </td>
 
                         {/* Title */}
@@ -436,23 +378,22 @@ export default function ProblemsPage() {
                           <Link
                             to={`/problems/${p.problem_id}`}
                             className={`text-sm font-medium transition-colors ${
-                              solved
-                                ? 'text-[#4A5568] hover:text-[#7A8FA8]'
-                                : 'text-[#C8D4E0] hover:text-[#E8EDF4]'
+                              solved ? 'text-[#AAAAAA] hover:text-[#888888]' : 'text-[#111111] hover:text-[#333333]'
                             }`}
                           >
-                            <span className="text-[#4A5568] mr-2 font-mono text-xs">{String(idx + 1).padStart(2, '0')}.</span>
+                            <span className="text-[#CCCCCC] font-mono text-[11px] mr-2 tabular-nums">
+                              {String(idx + 1).padStart(2, '0')}.
+                            </span>
                             {p.title}
                           </Link>
-                          {/* Tags — shown on small screens */}
                           <div className="flex flex-wrap gap-1 mt-1 md:hidden">
                             {(p.tags || []).slice(0, 2).map(t => (
-                              <span key={t} className="text-[10px] text-[#4A5568] bg-[#13171E] border border-[#1E2530] px-1.5 py-0.5 rounded font-mono">{t}</span>
+                              <span key={t} className="text-[10px] text-[#AAAAAA] bg-[#F5F5F5] border border-[#EEEEEE] px-1.5 py-0.5 rounded font-mono">{t}</span>
                             ))}
                           </div>
                         </td>
 
-                        {/* Domain chip */}
+                        {/* Domain */}
                         <td className="px-4 py-3.5 hidden md:table-cell">
                           {p.domain ? (
                             <button
@@ -460,23 +401,25 @@ export default function ProblemsPage() {
                               className="flex items-center gap-1.5 group/chip"
                             >
                               <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: domColor }} />
-                              <span className="text-xs whitespace-nowrap transition-colors group-hover/chip:opacity-100 opacity-60" style={{ color: domColor }}>
+                              <span className="text-xs text-[#888888] group-hover/chip:text-[#444444] whitespace-nowrap transition-colors">
                                 {p.domain}
                               </span>
                             </button>
                           ) : (
-                            <span className="text-xs text-[#2A3240]">—</span>
+                            <span className="text-xs text-[#DDDDDD]">—</span>
                           )}
                         </td>
 
                         {/* Difficulty */}
                         <td className="px-4 py-3.5 hidden sm:table-cell">
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${DIFF_STYLE[p.difficulty] || ''}`}>
-                            {p.difficulty}
-                          </span>
+                          {p.difficulty && (
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${ds.text} ${ds.bg} ${ds.border}`}>
+                              {p.difficulty}
+                            </span>
+                          )}
                         </td>
 
-                        {/* Company tickers */}
+                        {/* Companies */}
                         <td className="px-4 py-3.5 hidden lg:table-cell">
                           <div className="flex items-center gap-1">
                             {(p.companies || []).slice(0, 3).map(co => (
@@ -485,8 +428,8 @@ export default function ProblemsPage() {
                                 onClick={() => setActiveCompany(activeCompany === co ? null : co)}
                                 className={`text-[10px] font-mono px-1.5 py-0.5 rounded border transition-colors ${
                                   activeCompany === co
-                                    ? 'border-[#4A8FE8]/40 bg-[#4A8FE8]/10 text-[#4A8FE8]'
-                                    : 'border-[#1E2530] text-[#4A5568] hover:border-[#2A3240] hover:text-[#7A8FA8]'
+                                    ? 'border-[#111111] bg-[#111111] text-white'
+                                    : 'border-[#E8E8E8] text-[#AAAAAA] hover:border-[#D0D0D0] hover:text-[#555555]'
                                 }`}
                                 title={co}
                               >
@@ -494,14 +437,14 @@ export default function ProblemsPage() {
                               </button>
                             ))}
                             {(p.companies || []).length > 3 && (
-                              <span className="text-[10px] text-[#4A5568] font-mono">+{(p.companies || []).length - 3}</span>
+                              <span className="text-[10px] text-[#CCCCCC] font-mono">+{(p.companies || []).length - 3}</span>
                             )}
                           </div>
                         </td>
 
                         {/* Arrow */}
                         <td className="px-4 py-3.5">
-                          <ChevronRight className="w-4 h-4 text-[#1E2530] group-hover:text-[#4A8FE8] transition-colors ml-auto" />
+                          <ChevronRight className="w-4 h-4 text-[#E0E0E0] group-hover:text-[#888888] transition-colors ml-auto" />
                         </td>
                       </tr>
                     );
@@ -511,15 +454,17 @@ export default function ProblemsPage() {
             )}
           </div>
 
-          {/* Footer count */}
+          {/* Footer */}
           {!loading && filtered.length > 0 && (
-            <div className="px-6 py-3 border-t border-[#1E2530] flex items-center justify-between">
-              <span className="text-xs text-[#4A5568]">
-                Showing {filtered.length} of {totalProblems} problems
+            <div className="px-5 py-3 border-t border-[#F0F0F0] bg-[#FAFAFA] flex items-center justify-between">
+              <span className="text-xs text-[#AAAAAA]">
+                {filtered.length} of {totalProblems} problems
               </span>
-              <span className="text-xs text-[#4A5568]">
-                {totalSolved > 0 && `${Math.round((totalSolved / totalProblems) * 100)}% complete`}
-              </span>
+              {totalSolved > 0 && (
+                <span className="text-xs text-[#AAAAAA]">
+                  {Math.round((totalSolved / totalProblems) * 100)}% complete
+                </span>
+              )}
             </div>
           )}
         </main>
