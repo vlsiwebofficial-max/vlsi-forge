@@ -4,7 +4,29 @@ import axios from 'axios';
 import { useAuth, API } from '../App';
 import { cachedGet } from '../utils/apiCache';
 import Navbar from '../components/Navbar';
-import { CheckCircle, XCircle, Clock, BarChart2, BookOpen, Zap, ArrowRight, Trophy, User, Flame } from 'lucide-react';
+import { CheckCircle, XCircle, BarChart2, BookOpen, Zap, ArrowRight, Trophy, User, Flame } from 'lucide-react';
+
+const DOMAIN_COLOR = {
+  'RTL Design':           '#2563EB',
+  'Design Verification':  '#16A34A',
+  'Computer Architecture':'#9333EA',
+  'Debug & Analysis':     '#D97706',
+  'Programming':          '#DB2777',
+  'Timing & Power':       '#0891B2',
+};
+
+function relativeTime(iso) {
+  const diffMs  = Date.now() - new Date(iso).getTime();
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 1)   return 'just now';
+  if (diffMin < 60)  return `${diffMin}m ago`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH   < 24)  return `${diffH}h ago`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD   === 1) return 'yesterday';
+  if (diffD   < 7)   return `${diffD}d ago`;
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
 function StatCard({ label, value, sub, accent }) {
   return (
@@ -130,7 +152,7 @@ export default function DashboardPage() {
           {loading ? (
             <div className="p-5 space-y-2.5">
               {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-10 rounded-xl shimmer" style={{ opacity: 1 - i * 0.14 }} />
+                <div key={i} className="h-14 rounded-xl shimmer" style={{ opacity: 1 - i * 0.14 }} />
               ))}
             </div>
           ) : submissions.length === 0 ? (
@@ -145,39 +167,49 @@ export default function DashboardPage() {
               </Link>
             </div>
           ) : (
-            <div>
-              <div className="grid grid-cols-12 px-6 py-2.5 bg-[#FAFAFA] border-b border-[#F5F5F5]">
-                <div className="col-span-2 text-[9px] font-bold tracking-[0.14em] text-[#BBBBBB] uppercase">Status</div>
-                <div className="col-span-6 text-[9px] font-bold tracking-[0.14em] text-[#BBBBBB] uppercase">Problem</div>
-                <div className="col-span-2 text-[9px] font-bold tracking-[0.14em] text-[#BBBBBB] uppercase hidden sm:block">Tests</div>
-                <div className="col-span-2 text-[9px] font-bold tracking-[0.14em] text-[#BBBBBB] uppercase hidden sm:block">Date</div>
-              </div>
-              <div className="divide-y divide-[#F5F5F5]">
-                {submissions.map(sub => {
-                  const cfg = STATUS_CFG[sub.status] || STATUS_CFG.error;
-                  return (
-                    <Link key={sub.submission_id} to={`/submissions/${sub.submission_id}`}
-                      className="grid grid-cols-12 items-center px-6 py-3.5 hover:bg-[#FAFAFA] transition-all group">
-                      <div className="col-span-2">
-                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-lg border ${cfg.text} ${cfg.bg} ${cfg.border}`}>
-                          {cfg.icon}
-                          <span className="hidden sm:inline">{cfg.label}</span>
-                        </span>
+            <div className="divide-y divide-[#F5F5F5]">
+              {submissions.map(sub => {
+                const cfg  = STATUS_CFG[sub.status] || STATUS_CFG.error;
+                const ds   = DIFF_STYLE[sub.problem_difficulty] || {};
+                const domColor = DOMAIN_COLOR[sub.problem_domain] || '#AAAAAA';
+                const title = sub.problem_title || sub.problem_id;
+                return (
+                  <Link key={sub.submission_id} to={`/submissions/${sub.submission_id}`}
+                    className="flex items-center gap-4 px-6 py-4 hover:bg-[#FAFAFA] transition-colors group">
+                    {/* Status badge */}
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border shrink-0 ${cfg.text} ${cfg.bg} ${cfg.border}`}>
+                      {cfg.icon}
+                      <span className="hidden sm:inline">{cfg.label}</span>
+                    </span>
+
+                    {/* Problem info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-[#111111] group-hover:text-[#333333] truncate">{title}</span>
+                        {sub.problem_difficulty && (
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border shrink-0 ${ds.text} ${ds.bg} ${ds.border}`}>
+                            {sub.problem_difficulty}
+                          </span>
+                        )}
                       </div>
-                      <div className="col-span-6 text-sm text-[#444444] group-hover:text-[#111111] font-medium truncate pr-4">
-                        {sub.problem_id}
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {sub.problem_domain && (
+                          <span className="flex items-center gap-1 text-[11px] text-[#AAAAAA]">
+                            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: domColor }}/>
+                            {sub.problem_domain}
+                          </span>
+                        )}
                       </div>
-                      <div className="col-span-2 hidden sm:block text-xs font-mono text-[#AAAAAA]">
-                        {sub.passed_count}/{sub.total_count}
-                      </div>
-                      <div className="col-span-2 hidden sm:flex items-center gap-1.5 text-xs text-[#CCCCCC]">
-                        <Clock className="w-3 h-3 shrink-0" />
-                        {new Date(sub.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
+                    </div>
+
+                    {/* Tests + time */}
+                    <div className="hidden sm:flex flex-col items-end gap-0.5 shrink-0">
+                      <span className="text-xs font-mono text-[#888888]">{sub.passed_count}/{sub.total_count} tests</span>
+                      <span className="text-[11px] text-[#CCCCCC]">{relativeTime(sub.submitted_at)}</span>
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           )}
         </div>

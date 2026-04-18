@@ -1185,18 +1185,48 @@ async def delete_testcase(request: Request, problem_id: str, testcase_id: str):
 
 @api_router.get("/submissions/user/me")
 async def get_user_submissions(request: Request, limit: int = 50, skip: int = 0):
-    """Get current user's submissions — paginated, most recent first."""
+    """
+    Get current user's submissions — paginated, most recent first.
+    Enriched with problem_title, problem_difficulty, and problem_domain
+    via a $lookup so the frontend never has to display raw UUIDs.
+    """
     user = await require_auth(request)
-    limit = min(limit, 200)  # hard cap
+    limit = min(limit, 200)
 
-    submissions = await db.submissions.find(
-        {"user_id": user.user_id},
-        {"_id": 0, "vcd_data": 0, "waveform_json": 0}  # exclude heavy binary fields
-    ).sort("submitted_at", -1).skip(skip).limit(limit).to_list(limit)
+    pipeline = [
+        {"$match": {"user_id": user.user_id}},
+        {"$sort":  {"submitted_at": -1}},
+        {"$skip":  skip},
+        {"$limit": limit},
+        # Join with problems to get human-readable fields
+        {"$lookup": {
+            "from":         "problems",
+            "localField":   "problem_id",
+            "foreignField": "problem_id",
+            "as":           "problem_info"
+        }},
+        {"$unwind": {"path": "$problem_info", "preserveNullAndEmptyArrays": True}},
+        # Project only what the frontend needs — drop heavy binaries
+        {"$project": {
+            "_id":               0,
+            "submission_id":     1,
+            "problem_id":        1,
+            "problem_title":     "$problem_info.title",
+            "problem_difficulty":"$problem_info.difficulty",
+            "problem_domain":    "$problem_info.domain",
+            "status":            1,
+            "passed_count":      1,
+            "total_count":       1,
+            "language":          1,
+            "submitted_at":      1,
+        }},
+    ]
+
+    submissions = await db.submissions.aggregate(pipeline).to_list(limit)
 
     for s in submissions:
-        if isinstance(s.get("submitted_at"), str):
-            s["submitted_at"] = datetime.fromisoformat(s["submitted_at"])
+        if isinstance(s.get("submitted_at"), datetime):
+            s["submitted_at"] = s["submitted_at"].isoformat()
 
     return submissions
 
