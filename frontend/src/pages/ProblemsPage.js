@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { API } from '../App';
@@ -109,8 +109,10 @@ export default function ProblemsPage() {
   const [activeDomain, setActiveDomain] = useState('all');
   const [diff, setDiff] = useState('All');
   const [activeCompany, setActiveCompany] = useState(null);
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState(''); // raw input (updates every keystroke)
+  const [search, setSearch] = useState('');            // debounced (drives filter)
   const [hideSolved, setHideSolved] = useState(false);
+  const debounceRef = useRef(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -130,6 +132,13 @@ export default function ProblemsPage() {
     };
     fetchData();
   }, []);
+
+  // Debounce search input by 180ms for snappy feel without over-rendering
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setSearch(searchInput), 180);
+    return () => clearTimeout(debounceRef.current);
+  }, [searchInput]);
 
   const domainCounts = useMemo(() => {
     const counts = {};
@@ -162,7 +171,7 @@ export default function ProblemsPage() {
       <div className="flex" style={{ minHeight: 'calc(100vh - 56px)' }}>
 
         {/* ── Left sidebar ────────────────────────────────────────── */}
-        <aside className="hidden lg:flex flex-col w-52 xl:w-56 shrink-0 border-r border-[#E8E8E8] bg-[#FAFAFA] sticky top-[56px] h-[calc(100vh-56px)] overflow-y-auto">
+        <aside className="hidden lg:flex flex-col w-52 xl:w-56 shrink-0 border-r border-[#EEEEEE] bg-[#FAFAFA] sticky top-[56px] h-[calc(100vh-56px)] overflow-y-auto">
           <div className="px-3 pt-5 pb-2">
             <p className="text-[9px] font-semibold tracking-[0.14em] text-[#AAAAAA] uppercase px-2 mb-2">
               Domains
@@ -178,7 +187,7 @@ export default function ProblemsPage() {
                   key={id}
                   onClick={() => setActiveDomain(id)}
                   className={`w-full text-left px-2.5 py-2 rounded-lg mb-0.5 transition-all group ${
-                    isActive ? 'bg-white border border-[#E8E8E8] shadow-sm' : 'hover:bg-white'
+                    isActive ? 'bg-white border border-[#E4E4E4] shadow-card' : 'hover:bg-white/70'
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
@@ -222,7 +231,7 @@ export default function ProblemsPage() {
                   key={d}
                   onClick={() => setDiff(d)}
                   className={`w-full text-left px-2.5 py-1.5 rounded-lg mb-0.5 flex items-center justify-between transition-colors ${
-                    isActive ? 'bg-white border border-[#E8E8E8]' : 'hover:bg-white'
+                    isActive ? 'bg-white border border-[#E4E4E4] shadow-card' : 'hover:bg-white/70'
                   }`}
                 >
                   <span className={`text-xs font-medium ${isActive && d !== 'All' ? s.text : isActive ? 'text-[#111111]' : 'text-[#888888]'}`}>
@@ -274,8 +283,8 @@ export default function ProblemsPage() {
               <input
                 type="text"
                 placeholder="Search problems, tags, domains…"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
                 className="w-full bg-[#FAFAFA] border border-[#E8E8E8] rounded-lg pl-9 pr-4 py-2 text-sm text-[#111111] placeholder-[#CCCCCC] focus:outline-none focus:border-[#111111] focus:ring-1 focus:ring-[#111111] transition-all"
               />
             </div>
@@ -325,7 +334,7 @@ export default function ProblemsPage() {
                 </div>
                 <p className="text-[#888888] text-sm font-medium">No problems match your filters</p>
                 <button
-                  onClick={() => { setSearch(''); setDiff('All'); setActiveCompany(null); setActiveDomain('all'); setHideSolved(false); }}
+                  onClick={() => { setSearchInput(''); setSearch(''); setDiff('All'); setActiveCompany(null); setActiveDomain('all'); setHideSolved(false); }}
                   className="mt-3 text-xs text-[#555555] hover:text-[#111111] hover:underline font-medium transition-colors"
                 >
                   Clear all filters
@@ -363,7 +372,7 @@ export default function ProblemsPage() {
                     return (
                       <tr
                         key={p.problem_id}
-                        className="group border-b border-[#F5F5F5] hover:bg-[#FAFAFA] transition-colors"
+                        className="group border-b border-[#F5F5F5] hover:bg-[#F8F8F8] transition-all"
                       >
                         {/* Status */}
                         <td className="px-5 py-3.5 w-10">

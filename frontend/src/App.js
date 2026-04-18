@@ -1,32 +1,40 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import axios from 'axios';
-import LandingPage from './pages/LandingPage';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import DashboardPage from './pages/DashboardPage';
-import ProblemsPage from './pages/ProblemsPage';
-import ProblemDetailPage from './pages/ProblemDetailPage';
-import SubmissionPage from './pages/SubmissionPage';
-import AdminPage from './pages/AdminPage';
-import VerifyEmailPage from './pages/VerifyEmailPage';
-import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import ResetPasswordPage from './pages/ResetPasswordPage';
+
+// ─── Route-level code splitting ───────────────────────────────────────────────
+// Each page is a separate JS chunk — Monaco only loads when /problems/:id opens
+const LandingPage      = lazy(() => import('./pages/LandingPage'));
+const LoginPage        = lazy(() => import('./pages/LoginPage'));
+const RegisterPage     = lazy(() => import('./pages/RegisterPage'));
+const DashboardPage    = lazy(() => import('./pages/DashboardPage'));
+const ProblemsPage     = lazy(() => import('./pages/ProblemsPage'));
+const ProblemDetailPage = lazy(() => import('./pages/ProblemDetailPage'));
+const SubmissionPage   = lazy(() => import('./pages/SubmissionPage'));
+const AdminPage        = lazy(() => import('./pages/AdminPage'));
+const VerifyEmailPage  = lazy(() => import('./pages/VerifyEmailPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const ResetPasswordPage  = lazy(() => import('./pages/ResetPasswordPage'));
 
 export const API = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 export const AuthContext = createContext(null);
+export function useAuth() { return useContext(AuthContext); }
 
-export function useAuth() {
-  return useContext(AuthContext);
+// ─── Minimal page loader ──────────────────────────────────────────────────────
+function PageLoader() {
+  return (
+    <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 rounded-full border-2 border-[#E8E8E8] border-t-[#111111] animate-spin" />
+        <span className="text-xs text-[#AAAAAA] font-medium tracking-wide">Loading…</span>
+      </div>
+    </div>
+  );
 }
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return (
-    <div className="min-h-screen bg-[#0A0E14] flex items-center justify-center">
-      <div className="text-[#4A8FE8] text-lg font-medium">Loading...</div>
-    </div>
-  );
+  if (loading) return <PageLoader />;
   return user ? children : <Navigate to="/login" replace />;
 }
 
@@ -42,23 +50,16 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Try to restore session via httpOnly cookie (cross-origin requires withCredentials)
     axios.get(`${API}/api/auth/me`, { withCredentials: true })
-      .then(res => {
-        setUser(res.data);
-      })
-      .catch(() => {
-        setUser(null);
-      })
+      .then(res => setUser(res.data))
+      .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 
   const login = async (email, password) => {
     const res = await axios.post(`${API}/api/auth/login`, { email, password }, { withCredentials: true });
-    // Backend returns user fields directly (auth via httpOnly cookie)
-    const userData = res.data;
-    setUser(userData);
-    return userData;
+    setUser(res.data);
+    return res.data;
   };
 
   const logout = () => {
@@ -68,31 +69,30 @@ export default function App() {
 
   const register = async (name, email, password) => {
     const res = await axios.post(`${API}/api/auth/register`, { name, email, password });
-    // New flow: returns {requires_verification, email} — no session yet
     return res.data;
   };
 
-  const setUserFromToken = (userData) => {
-    setUser(userData);
-  };
+  const setUserFromToken = (userData) => setUser(userData);
 
   return (
     <AuthContext.Provider value={{ user, loading, login, logout, register, setUserFromToken }}>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/verify-email" element={<VerifyEmailPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
-          <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
-          <Route path="/problems" element={<PrivateRoute><ProblemsPage /></PrivateRoute>} />
-          <Route path="/problems/:id" element={<PrivateRoute><ProblemDetailPage /></PrivateRoute>} />
-          <Route path="/submissions/:id" element={<PrivateRoute><SubmissionPage /></PrivateRoute>} />
-          <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/"               element={<LandingPage />} />
+            <Route path="/login"          element={<LoginPage />} />
+            <Route path="/register"       element={<RegisterPage />} />
+            <Route path="/verify-email"   element={<VerifyEmailPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password"  element={<ResetPasswordPage />} />
+            <Route path="/dashboard"      element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
+            <Route path="/problems"       element={<PrivateRoute><ProblemsPage /></PrivateRoute>} />
+            <Route path="/problems/:id"   element={<PrivateRoute><ProblemDetailPage /></PrivateRoute>} />
+            <Route path="/submissions/:id" element={<PrivateRoute><SubmissionPage /></PrivateRoute>} />
+            <Route path="/admin"          element={<AdminRoute><AdminPage /></AdminRoute>} />
+            <Route path="*"              element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </AuthContext.Provider>
   );

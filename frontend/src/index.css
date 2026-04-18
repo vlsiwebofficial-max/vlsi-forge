@@ -3,42 +3,71 @@
 @tailwind utilities;
 
 @layer base {
-  * {
-    box-sizing: border-box;
-  }
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
 
   body {
     margin: 0;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    background-color: #FFFFFF;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #FFFFFF;
     color: #111111;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
-  code, pre {
-    font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
   }
 }
 
 @layer utilities {
-  ::-webkit-scrollbar {
-    width: 5px;
-    height: 5px;
+  /* ── Scrollbars ── */
+  ::-webkit-scrollbar          { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track    { background: #F8F8F8; }
+  ::-webkit-scrollbar-thumb    { background: #DEDEDE; border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: #BBBBBB; }
+
+  /* Dark scrollbars inside editor panel */
+  .editor-pane ::-webkit-scrollbar-track { background: #1e1e1e; }
+  .editor-pane ::-webkit-scrollbar-thumb { background: #3e3e3e; border-radius: 99px; }
+  .editor-pane ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+  /* ── Premium shadows ── */
+  .shadow-card {
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.05);
   }
-  ::-webkit-scrollbar-track {
-    background: #F5F5F5;
+  .shadow-card-hover {
+    transition: box-shadow 150ms ease, transform 150ms ease;
   }
-  ::-webkit-scrollbar-thumb {
-    background: #D0D0D0;
-    border-radius: 3px;
+  .shadow-card-hover:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.06), 0 16px 40px rgba(0,0,0,0.08);
+    transform: translateY(-1px);
   }
-  ::-webkit-scrollbar-thumb:hover {
-    background: #AAAAAA;
+  .shadow-navbar {
+    box-shadow: 0 1px 0 #E8E8E8, 0 2px 8px rgba(0,0,0,0.03);
+  }
+  .shadow-btn {
+    box-shadow: 0 1px 2px rgba(0,0,0,0.15), 0 2px 6px rgba(0,0,0,0.10);
+  }
+  .shadow-btn:hover {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.12);
   }
 
-  /* Editor scrollbar stays dark */
-  .editor-pane ::-webkit-scrollbar-track { background: #1e1e1e; }
-  .editor-pane ::-webkit-scrollbar-thumb { background: #424242; }
-  .editor-pane ::-webkit-scrollbar-thumb:hover { background: #666; }
+  /* ── Smooth global transitions ── */
+  a, button { transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease; }
+
+  /* ── Page enter animation ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .animate-fade-up {
+    animation: fadeUp 300ms ease both;
+  }
+
+  /* ── Spinner ── */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin { animation: spin 700ms linear infinite; }
 }
