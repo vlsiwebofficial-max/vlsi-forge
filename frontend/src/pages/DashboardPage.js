@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
 import { useAuth, API } from '../App';
+import { cachedGet } from '../utils/apiCache';
 import Navbar from '../components/Navbar';
 import { CheckCircle, XCircle, Clock, BarChart2, BookOpen, Zap, ArrowRight } from 'lucide-react';
 
@@ -31,8 +31,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     Promise.all([
-      axios.get(`${API}/api/stats/me`, { withCredentials: true }),
-      axios.get(`${API}/api/submissions/user/me`, { withCredentials: true })
+      cachedGet(`${API}/api/stats/me`, { withCredentials: true }),
+      cachedGet(`${API}/api/submissions/user/me`, { withCredentials: true })
     ]).then(([s, sub]) => {
       setStats(s.data);
       setSubmissions(sub.data.slice(0, 8));

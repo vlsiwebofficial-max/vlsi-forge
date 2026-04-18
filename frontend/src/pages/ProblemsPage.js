@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
 import { API } from '../App';
+import { cachedGet } from '../utils/apiCache';
 import Navbar from '../components/Navbar';
 import { Search, ChevronRight, CheckCircle2, Circle } from 'lucide-react';
 
@@ -118,8 +118,8 @@ export default function ProblemsPage() {
     const fetchData = async () => {
       try {
         const [problemsRes, solvedRes] = await Promise.allSettled([
-          axios.get(`${API}/api/problems`, { withCredentials: true }),
-          axios.get(`${API}/api/stats/solved-problems`, { withCredentials: true }),
+          cachedGet(`${API}/api/problems`, { withCredentials: true }),
+          cachedGet(`${API}/api/stats/solved-problems`, { withCredentials: true }),
         ]);
         if (problemsRes.status === 'fulfilled') setProblems(problemsRes.value.data);
         if (solvedRes.status === 'fulfilled') {

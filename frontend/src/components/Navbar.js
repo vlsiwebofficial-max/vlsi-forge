@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../App';
-import { Cpu, LayoutDashboard, BookOpen, Shield, LogOut, ChevronDown, Menu, X, ExternalLink } from 'lucide-react';
+import { useAuth, preloadDashboard, preloadProblems } from '../App';
+import { Cpu, LayoutDashboard, BookOpen, Shield, LogOut, ChevronDown, Menu, X } from 'lucide-react';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -30,10 +30,17 @@ export default function Navbar() {
   const isActive = (path) =>
     location.pathname === path || location.pathname.startsWith(path + '/');
 
-  // Underline-style nav link (right side)
+  // Map routes to their preload functions so hovering a link prefetches its chunk
+  const PRELOADERS = {
+    '/dashboard': preloadDashboard,
+    '/problems':  preloadProblems,
+  };
+
+  // Underline-style nav link (right side) — prefetches chunk on hover
   const NavLink = ({ to, label }) => (
     <Link
       to={to}
+      onMouseEnter={() => PRELOADERS[to]?.()}
       className={`relative text-sm font-medium py-1 group transition-colors ${
         isActive(to) ? 'text-[#111111]' : 'text-[#888888] hover:text-[#444444]'
       }`}
@@ -60,15 +67,14 @@ export default function Navbar() {
               target="_blank"
               rel="noreferrer"
               className="group flex items-center gap-2 shrink-0"
-              title="VLSI Web — main site"
+              title="VLSI WEB — main site"
             >
               <div className="w-7 h-7 bg-[#111111] rounded-[7px] flex items-center justify-center shadow-btn group-hover:bg-[#2A2A2A] transition-colors">
                 <Cpu className="w-[15px] h-[15px] text-white" />
               </div>
-              <span className="hidden sm:block font-bold text-[#111111] text-[15px] tracking-tight">
-                VLSI
+              <span className="hidden sm:block font-bold text-[#111111] text-[15px] tracking-tight group-hover:text-[#444444] transition-colors">
+                VLSI WEB
               </span>
-              <ExternalLink className="hidden sm:block w-3 h-3 text-[#CCCCCC] group-hover:text-[#888888] transition-colors" />
             </a>
 
             {/* Separator slash */}
@@ -147,6 +153,7 @@ export default function Navbar() {
                       <div className="p-1.5">
                         <Link
                           to="/dashboard"
+                          onMouseEnter={preloadDashboard}
                           onClick={() => setProfileOpen(false)}
                           className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[#444444] hover:bg-[#F5F5F5] transition-colors font-medium"
                         >
@@ -155,6 +162,7 @@ export default function Navbar() {
                         </Link>
                         <Link
                           to="/problems"
+                          onMouseEnter={preloadProblems}
                           onClick={() => setProfileOpen(false)}
                           className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[#444444] hover:bg-[#F5F5F5] transition-colors font-medium"
                         >
