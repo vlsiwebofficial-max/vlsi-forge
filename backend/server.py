@@ -1540,6 +1540,143 @@ async def get_solved_problems(request: Request):
     }
 
 
+# ==================== ACTIVITY HEATMAP ====================
+
+@api_router.get("/stats/heatmap")
+async def get_activity_heatmap(request: Request):
+    """
+    Returns daily submission counts for the past 365 days.
+    Used by the Profile page to render a GitHub-style activity heatmap.
+    Response: { "days": [ {"date": "2025-04-18", "count": 3}, ... ] }
+    """
+    user = await require_auth(request)
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=365)
+
+    pipeline = [
+        {"$match": {
+            "user_id": user.user_id,
+            "submitted_at": {"$gte": cutoff}
+        }},
+        {"$group": {
+            "_id": {
+                "$dateToString": {
+                    "format": "%Y-%m-%d",
+                    "date": "$submitted_at",
+                    "timezone": "UTC"
+                }
+            },
+            "count": {"$sum": 1}
+        }},
+        {"$sort": {"_id": 1}}
+    ]
+
+    raw = await db.submissions.aggregate(pipeline).to_list(400)
+    days = [{"date": r["_id"], "count": r["count"]} for r in raw]
+    return {"days": days}
+
+
+# ==================== PER-PROBLEM SUBMISSION HISTORY ====================
+
+@api_router.get("/submissions/problem/{problem_id}")
+async def get_problem_submissions(request: Request, problem_id: str, limit: int = 20):
+    """
+    Get the current user's submission history for a specific problem.
+    Most recent first. Excludes heavy binary fields.
+    """
+    user = await require_auth(request)
+    limit = min(limit, 50)
+
+    submissions = await db.submissions.find(
+        {"user_id": user.user_id, "problem_id": problem_id},
+        {"_id": 0, "vcd_data": 0, "waveform_json": 0, "code": 0}
+    ).sort("submitted_at", -1).limit(limit).to_list(limit)
+
+    for s in submissions:
+        if isinstance(s.get("submitted_at"), datetime):
+            s["submitted_at"] = s["submitted_at"].isoformat()
+
+    return submissions
+
+
+# ==================== DAILY CHALLENGE ====================
+
+@api_router.get("/problems/daily")
+async def get_daily_problem(request: Request):
+    """
+    Returns a deterministic 'problem of the day' by hashing today's UTC date
+    against the list of all problem IDs. Same problem for all users on a given day.
+    """
+    await require_auth(request)
+
+    problems = await db.problems.find(
+        {}, {"_id": 0, "problem_id": 1, "title": 1, "difficulty": 1, "domain": 1}
+    ).to_list(500)
+
+    if not problems:
+        raise HTTPException(status_code=404, detail="No problems available")
+
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    idx = int(__import__('hashlib').md5(today_str.encode()).hexdigest(), 16) % len(problems)
+    daily = problems[idx]
+    daily["date"] = today_str
+    return daily
+
+
+# ==================== LEADERBOARD ====================
+
+@api_router.get("/leaderboard")
+async def get_leaderboard(request: Request, limit: int = 50):
+    """
+    Top users ranked by unique problems solved (status=passed).
+    Ties broken by total submissions (fewer = higher rank).
+    """
+    await require_auth(request)
+    limit = min(limit, 100)
+
+    pipeline = [
+        {"$match": {"status": "passed"}},
+        # One entry per (user_id, problem_id) pair
+        {"$group": {
+            "_id": {"user_id": "$user_id", "problem_id": "$problem_id"}
+        }},
+        # Count unique problems per user
+        {"$group": {
+            "_id": "$_id.user_id",
+            "problems_solved": {"$sum": 1}
+        }},
+        {"$sort": {"problems_solved": -1}},
+        {"$limit": limit},
+        # Join with users for display name
+        {"$lookup": {
+            "from": "users",
+            "localField": "_id",
+            "foreignField": "user_id",
+            "as": "user_info"
+        }},
+        {"$unwind": {"path": "$user_info", "preserveNullAndEmptyArrays": True}},
+        {"$project": {
+            "_id": 0,
+            "user_id": "$_id",
+            "name": "$user_info.name",
+            "problems_solved": 1
+        }}
+    ]
+
+    rows = await db.submissions.aggregate(pipeline).to_list(limit)
+
+    # Attach rank
+    for i, row in enumerate(rows):
+        row["rank"] = i + 1
+        # Mask email-style names for privacy: keep first name only
+        if row.get("name"):
+            row["display_name"] = row["name"].split()[0] + (" " + row["name"].split()[1][0] + "." if len(row["name"].split()) > 1 else "")
+        else:
+            row["display_name"] = "User"
+
+    return rows
+
+
 # ==================== ADMIN ROUTES (Paginated) ====================
 
 @api_router.get("/admin/users")

@@ -16,6 +16,8 @@ const AdminPage          = lazy(() => import('./pages/AdminPage'));
 const VerifyEmailPage    = lazy(() => import('./pages/VerifyEmailPage'));
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
 const ResetPasswordPage  = lazy(() => import('./pages/ResetPasswordPage'));
+const ProfilePage        = lazy(() => import('./pages/ProfilePage'));
+const LeaderboardPage    = lazy(() => import('./pages/LeaderboardPage'));
 
 // ─── Exposed preload functions ────────────────────────────────────────────────
 // Call these to eagerly fetch a route's JS chunk before the user navigates.
@@ -112,6 +114,8 @@ export default function App() {
             <Route path="/problems/:id"    element={<PrivateRoute><ProblemDetailPage /></PrivateRoute>} />
             <Route path="/submissions/:id" element={<PrivateRoute><SubmissionPage /></PrivateRoute>} />
             <Route path="/admin"           element={<AdminRoute><AdminPage /></AdminRoute>} />
+            <Route path="/profile"        element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
+            <Route path="/leaderboard"    element={<PrivateRoute><LeaderboardPage /></PrivateRoute>} />
             <Route path="*"               element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>

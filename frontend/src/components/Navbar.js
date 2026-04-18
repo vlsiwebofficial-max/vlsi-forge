@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth, preloadDashboard, preloadProblems } from '../App';
-import { Cpu, LayoutDashboard, BookOpen, Shield, LogOut, ChevronDown, Menu, X } from 'lucide-react';
+import { Cpu, LayoutDashboard, BookOpen, Shield, LogOut, ChevronDown, Menu, X, User, Trophy } from 'lucide-react';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -176,6 +176,22 @@ export default function Navbar() {
                             Admin
                           </Link>
                         )}
+                        <Link
+                          to="/profile"
+                          onClick={() => setProfileOpen(false)}
+                          className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[#444444] hover:bg-[#F5F5F5] transition-colors font-medium"
+                        >
+                          <User className="w-4 h-4 text-[#888888]" />
+                          My Profile
+                        </Link>
+                        <Link
+                          to="/leaderboard"
+                          onClick={() => setProfileOpen(false)}
+                          className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[#444444] hover:bg-[#F5F5F5] transition-colors font-medium"
+                        >
+                          <Trophy className="w-4 h-4 text-[#888888]" />
+                          Leaderboard
+                        </Link>
                       </div>
 
                       {/* Sign out */}

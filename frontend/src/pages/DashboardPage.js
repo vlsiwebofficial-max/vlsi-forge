@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import axios from 'axios';
 import { useAuth, API } from '../App';
 import { cachedGet } from '../utils/apiCache';
 import Navbar from '../components/Navbar';
-import { CheckCircle, XCircle, Clock, BarChart2, BookOpen, Zap, ArrowRight } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, BarChart2, BookOpen, Zap, ArrowRight, Trophy, User, Flame } from 'lucide-react';
 
 function StatCard({ label, value, sub, accent }) {
   return (
@@ -23,20 +24,29 @@ const STATUS_CFG = {
   error:  { text: 'text-[#D97706]', bg: 'bg-[#FFFBEB]', border: 'border-[#FDE68A]',  icon: <Zap className="w-3.5 h-3.5" />,      label: 'Error'  },
 };
 
+const DIFF_STYLE = {
+  Easy:   { text: 'text-[#16A34A]', bg: 'bg-[#F0FDF4]', border: 'border-[#BBF7D0]' },
+  Medium: { text: 'text-[#D97706]', bg: 'bg-[#FFFBEB]', border: 'border-[#FDE68A]' },
+  Hard:   { text: 'text-[#DC2626]', bg: 'bg-[#FEF2F2]', border: 'border-[#FECACA]' },
+};
+
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [stats, setStats] = useState(null);
+  const [stats,       setStats]       = useState(null);
   const [submissions, setSubmissions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [daily,       setDaily]       = useState(null);
+  const [loading,     setLoading]     = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      cachedGet(`${API}/api/stats/me`, { withCredentials: true }),
-      cachedGet(`${API}/api/submissions/user/me`, { withCredentials: true })
-    ]).then(([s, sub]) => {
-      setStats(s.data);
-      setSubmissions(sub.data.slice(0, 8));
-    }).catch(() => {}).finally(() => setLoading(false));
+    Promise.allSettled([
+      cachedGet(`${API}/api/stats/me`,            { withCredentials: true }),
+      cachedGet(`${API}/api/submissions/user/me`, { withCredentials: true }),
+      axios.get(`${API}/api/problems/daily`,      { withCredentials: true }),
+    ]).then(([s, sub, d]) => {
+      if (s.status   === 'fulfilled') setStats(s.value.data);
+      if (sub.status === 'fulfilled') setSubmissions(sub.value.data.slice(0, 8));
+      if (d.status   === 'fulfilled') setDaily(d.value.data);
+    }).finally(() => setLoading(false));
   }, []);
 
   return (
@@ -52,13 +62,45 @@ export default function DashboardPage() {
               Welcome back, {user?.name?.split(' ')[0]}
             </h1>
           </div>
-          <Link
-            to="/problems"
-            className="inline-flex items-center gap-1.5 bg-[#111111] hover:bg-[#2A2A2A] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-btn"
-          >
-            Browse Problems <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link to="/profile" className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#666666] hover:text-[#111111] px-3 py-2 rounded-lg hover:bg-white border border-[#E8E8E8] bg-white shadow-card">
+              <User className="w-3.5 h-3.5"/> Profile
+            </Link>
+            <Link to="/leaderboard" className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#666666] hover:text-[#111111] px-3 py-2 rounded-lg hover:bg-white border border-[#E8E8E8] bg-white shadow-card">
+              <Trophy className="w-3.5 h-3.5"/> Leaderboard
+            </Link>
+            <Link to="/problems" className="inline-flex items-center gap-1.5 bg-[#111111] hover:bg-[#2A2A2A] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-btn">
+              Problems <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
         </div>
+
+        {/* Daily Challenge */}
+        {daily && (
+          <div className="mb-6 animate-fade-up">
+            <Link
+              to={`/problems/${daily.problem_id}`}
+              className="flex items-center justify-between bg-gradient-to-r from-[#111111] to-[#2A2A2A] text-white rounded-2xl px-6 py-4 shadow-btn group hover:from-[#1A1A1A] hover:to-[#333333] transition-all"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+                  <Flame className="w-5 h-5 text-[#FB923C]"/>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold tracking-[0.14em] text-white/50 uppercase mb-0.5">Problem of the Day</div>
+                  <div className="font-bold text-[15px] tracking-tight">{daily.title}</div>
+                  <div className="flex items-center gap-2 mt-1">
+                    {daily.difficulty && (() => { const ds = DIFF_STYLE[daily.difficulty] || {}; return (
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${ds.text} ${ds.bg} ${ds.border}`}>{daily.difficulty}</span>
+                    );})()}
+                    {daily.domain && <span className="text-[10px] text-white/40">{daily.domain}</span>}
+                  </div>
+                </div>
+              </div>
+              <ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/80 group-hover:translate-x-1 transition-all shrink-0"/>
+            </Link>
+          </div>
+        )}
 
         {/* Stat cards */}
         {loading ? (
