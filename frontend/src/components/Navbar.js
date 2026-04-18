@@ -89,9 +89,6 @@ export default function Navbar() {
             <span className="font-extrabold text-[#111111] text-[15px] tracking-tight group-hover:text-[#333333] transition-colors">
               VLSI Forge
             </span>
-            <span className="text-[8px] bg-[#111111] text-white px-1.5 py-[3px] rounded font-black tracking-[0.12em] uppercase leading-none">
-              Beta
-            </span>
           </Link>
 
           {/* ── Col 3: Nav links + avatar (right) ── */}
