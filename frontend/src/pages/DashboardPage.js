@@ -64,11 +64,11 @@ export default function DashboardPage() {
         {loading ? (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="bg-white border border-[#E8E8E8] rounded-2xl h-24 animate-pulse shadow-card" />
+              <div key={i} className="bg-white border border-[#E8E8E8] rounded-2xl h-24 shimmer shadow-card" />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8 animate-fade-up">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8 animate-fade-up stagger">
             <StatCard label="Solved"      value={stats?.problems_solved ?? 0}    sub="problems"    accent="#111111" />
             <StatCard label="Submissions" value={stats?.total_submissions ?? 0}  sub="total"       accent="#2563EB" />
             <StatCard label="Acceptance"  value={stats?.acceptance_rate != null ? `${(stats.acceptance_rate * 100).toFixed(0)}%` : '—'} sub="pass rate" accent="#16A34A" />
@@ -88,7 +88,7 @@ export default function DashboardPage() {
           {loading ? (
             <div className="p-5 space-y-2.5">
               {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-10 bg-[#F5F5F5] rounded-xl animate-pulse" style={{ opacity: 1 - i * 0.15 }} />
+                <div key={i} className="h-10 rounded-xl shimmer" style={{ opacity: 1 - i * 0.14 }} />
               ))}
             </div>
           ) : submissions.length === 0 ? (
