@@ -25,6 +25,7 @@ import bcrypt
 import jwt
 import secrets
 from enum import Enum
+import anthropic as anthropic_sdk
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -43,6 +44,10 @@ JWT_EXPIRATION_DAYS = 7
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 FROM_EMAIL = os.environ.get('FROM_EMAIL', 'onboarding@resend.dev')
 EMAIL_CODE_EXPIRY_MINUTES = 15
+
+# Anthropic / AI Configuration
+ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
+_anthropic_client = anthropic_sdk.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
 
 # Rate limiter (keyed by IP)
 limiter = Limiter(key_func=get_remote_address)
@@ -1205,6 +1210,209 @@ async def delete_problem(request: Request, problem_id: str):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Problem not found")
     return {"message": "Problem deleted successfully"}
+
+
+# ==================== ADJACENT PROBLEMS (prev / next in domain) ====================
+
+DIFFICULTY_ORDER = {"Easy": 0, "Medium": 1, "Hard": 2, "Very Hard": 3}
+
+@api_router.get("/problems/{problem_id}/adjacent")
+async def get_adjacent_problems(problem_id: str):
+    """
+    Returns the previous and next problem IDs within the same domain,
+    ordered Easy → Medium → Hard then by created_at (stable sort).
+    """
+    problem = await db.problems.find_one({"problem_id": problem_id}, {"_id": 0, "domain": 1, "difficulty": 1})
+    if not problem:
+        raise HTTPException(status_code=404, detail="Problem not found")
+
+    domain = problem.get("domain")
+    if not domain:
+        return {"prev_id": None, "next_id": None}
+
+    # Fetch all problems in the same domain, lightweight projection
+    peers = await db.problems.find(
+        {"domain": domain},
+        {"_id": 0, "problem_id": 1, "title": 1, "difficulty": 1, "created_at": 1}
+    ).to_list(500)
+
+    # Stable sort: difficulty order first, then creation time
+    peers.sort(key=lambda p: (
+        DIFFICULTY_ORDER.get(p.get("difficulty", "Easy"), 0),
+        p.get("created_at", "")
+    ))
+
+    ids = [p["problem_id"] for p in peers]
+    try:
+        idx = ids.index(problem_id)
+    except ValueError:
+        return {"prev_id": None, "next_id": None}
+
+    prev_problem = peers[idx - 1] if idx > 0 else None
+    next_problem = peers[idx + 1] if idx < len(peers) - 1 else None
+
+    return {
+        "prev_id":    prev_problem["problem_id"] if prev_problem else None,
+        "prev_title": prev_problem["title"]      if prev_problem else None,
+        "next_id":    next_problem["problem_id"] if next_problem else None,
+        "next_title": next_problem["title"]      if next_problem else None,
+        "domain":     domain,
+        "position":   idx + 1,
+        "total":      len(peers),
+    }
+
+
+# ==================== AI HINT (streaming SSE) ====================
+
+class HintRequestBody(BaseModel):
+    code: str
+    message: Optional[str] = None   # user's chat message
+
+@api_router.post("/problems/{problem_id}/hint")
+async def stream_hint(request: Request, problem_id: str, body: HintRequestBody):
+    """
+    Streams an AI hint for the given problem + current user code via SSE.
+    Requires authentication; no API key → returns 503.
+    """
+    await require_auth(request)
+
+    if not _anthropic_client:
+        raise HTTPException(status_code=503, detail="AI assistant is not configured on this server.")
+
+    problem = await db.problems.find_one({"problem_id": problem_id}, {"_id": 0})
+    if not problem:
+        raise HTTPException(status_code=404, detail="Problem not found")
+
+    system_prompt = f"""You are an expert VLSI/RTL design tutor helping a candidate solve a coding problem on VLSI Forge.
+
+Problem: {problem.get('title', '')}
+Domain: {problem.get('domain', '')}
+Difficulty: {problem.get('difficulty', '')}
+
+Problem description:
+{problem.get('description', '')}
+
+Constraints:
+{problem.get('constraints', '')}
+
+Your role:
+- Give targeted, helpful hints WITHOUT revealing the complete solution
+- Ask guiding questions to help the candidate think through the problem
+- If they share code, analyze it and point out specific issues
+- Keep responses concise and focused (3-5 sentences max per hint unless showing code)
+- Use technical VLSI/HDL terminology correctly
+- If the candidate asks for the answer directly, instead give a strong directional hint"""
+
+    user_content = body.message or "I'm stuck. Can you give me a hint?"
+    if body.code and body.code.strip():
+        user_content = f"Here is my current code:\n\n```verilog\n{body.code}\n```\n\n{body.message or 'Can you help me identify what I might be doing wrong?'}"
+
+    async def generate():
+        try:
+            with _anthropic_client.messages.stream(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=512,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_content}]
+            ) as stream:
+                for text in stream.text_stream:
+                    # SSE format: data: <chunk>\n\n
+                    yield f"data: {text.replace(chr(10), '<br>')}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            logger.error(f"AI hint error: {e}")
+            yield f"data: Sorry, I encountered an error. Please try again.\n\n"
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        }
+    )
+
+
+# ==================== EXPLANATION (solution walkthrough, unlocked post-submit) ====================
+
+@api_router.get("/problems/{problem_id}/explanation")
+async def get_explanation(request: Request, problem_id: str):
+    """
+    Returns an AI-generated solution explanation for the problem.
+    Only available to authenticated users who have at least one submission on this problem.
+    Explanation is generated on first access and cached in MongoDB.
+    """
+    user = await require_auth(request)
+
+    # Check that the user has at least one submission for this problem
+    submission = await db.submissions.find_one(
+        {"user_id": user.user_id, "problem_id": problem_id},
+        {"_id": 0, "submission_id": 1}
+    )
+    if not submission:
+        raise HTTPException(
+            status_code=403,
+            detail="Submit at least one attempt before viewing the explanation."
+        )
+
+    problem = await db.problems.find_one({"problem_id": problem_id}, {"_id": 0})
+    if not problem:
+        raise HTTPException(status_code=404, detail="Problem not found")
+
+    # Check cache
+    cached = await db.explanations.find_one({"problem_id": problem_id}, {"_id": 0})
+    if cached:
+        return {"problem_id": problem_id, "explanation": cached["explanation"]}
+
+    if not _anthropic_client:
+        raise HTTPException(status_code=503, detail="AI assistant is not configured on this server.")
+
+    # Generate explanation
+    prompt = f"""Write a clear, educational solution walkthrough for this VLSI/RTL problem.
+
+Problem: {problem.get('title', '')}
+Domain:  {problem.get('domain', '')}
+Difficulty: {problem.get('difficulty', '')}
+
+Description:
+{problem.get('description', '')}
+
+Constraints:
+{problem.get('constraints', '')}
+
+Starter code:
+```verilog
+{problem.get('starter_code', '')}
+```
+
+Write the explanation in this format:
+1. **Key Insight** – what's the core concept/trick to understand
+2. **Approach** – step-by-step design strategy
+3. **Reference Solution** – complete, commented Verilog solution
+4. **Common Mistakes** – pitfalls candidates often hit
+
+Be concise but complete. Use proper HDL terminology."""
+
+    try:
+        message = _anthropic_client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1500,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        explanation = message.content[0].text
+    except Exception as e:
+        logger.error(f"Explanation generation error: {e}")
+        raise HTTPException(status_code=503, detail="Could not generate explanation. Try again later.")
+
+    # Cache it
+    await db.explanations.insert_one({
+        "problem_id": problem_id,
+        "explanation": explanation,
+        "generated_at": datetime.now(timezone.utc).isoformat()
+    })
+
+    return {"problem_id": problem_id, "explanation": explanation}
 
 
 # ==================== TESTCASE ROUTES ====================

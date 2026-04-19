@@ -17,3 +17,4 @@ python-jose[cryptography]==3.3.0
 starlette==0.37.2
 anyio==4.3.0
 dnspython==2.6.1
+anthropic>=0.40.0

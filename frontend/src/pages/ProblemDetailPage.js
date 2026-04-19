@@ -6,9 +6,10 @@ import Navbar from '../components/Navbar';
 import SignupModal from '../components/SignupModal';
 import Editor from '@monaco-editor/react';
 import {
-  Play, ChevronLeft, CheckCircle, XCircle, AlertCircle,
+  Play, ChevronLeft, ChevronRight, CheckCircle, XCircle, AlertCircle,
   Loader2, Download, ChevronDown, ZoomIn, ZoomOut,
-  Clock, CheckCircle2, Circle, Lock,
+  Lock, MessageCircle, BookOpen,
+  Send, Lightbulb, ArrowRight,
 } from 'lucide-react';
 
 const DIFF_STYLE = {
@@ -51,6 +52,223 @@ begin
   -- Your implementation
 end Behavioral;`,
 };
+
+// ─── Parse ports from starter_code ────────────────────────────────────────────
+function parsePorts(starterCode) {
+  if (!starterCode) return [];
+  // Match: input/output [width] name1, name2
+  const portRe = /\b(input|output)\s+(?:reg\s+)?(?:\[([^\]]+)\]\s+)?([a-zA-Z_][a-zA-Z0-9_,\s]*?)(?=\s*[,;)]|\s*\/\/)/g;
+  const ports = [];
+  let m;
+  while ((m = portRe.exec(starterCode)) !== null) {
+    const dir   = m[1];
+    const width = m[2] ? m[2].trim() : '1';
+    const names = m[3].split(',').map(n => n.trim()).filter(Boolean);
+    names.forEach(name => {
+      if (name && !name.includes('(') && !name.includes(')')) {
+        ports.push({ dir, width: width === '1' ? '1-bit' : `[${width}]`, name });
+      }
+    });
+  }
+  return ports;
+}
+
+// ─── Block Diagram SVG ────────────────────────────────────────────────────────
+function BlockDiagram({ ports, title }) {
+  const inputs  = ports.filter(p => p.dir === 'input');
+  const outputs = ports.filter(p => p.dir === 'output');
+  const maxRows = Math.max(inputs.length, outputs.length, 1);
+  const BOX_W = 140, ROW_H = 32, PAD_V = 24, LABEL_W = 110;
+  const boxH = maxRows * ROW_H + PAD_V * 2;
+  const totalW = LABEL_W * 2 + BOX_W + 60;
+  const totalH = boxH + 20;
+  const boxX = LABEL_W + 30;
+  const boxY = 10;
+  const midY = (row) => boxY + PAD_V + row * ROW_H + ROW_H / 2;
+
+  return (
+    <svg width={totalW} height={totalH} viewBox={`0 0 ${totalW} ${totalH}`} className="w-full max-w-full" style={{ maxHeight: 240 }}>
+      {/* Module box */}
+      <rect x={boxX} y={boxY} width={BOX_W} height={boxH} rx="8"
+        fill="#F8F8F8" stroke="#D0D0D0" strokeWidth="1.5"/>
+      <text x={boxX + BOX_W / 2} y={boxY + 14} textAnchor="middle"
+        fontSize="9" fontWeight="bold" fill="#888888" fontFamily="monospace">
+        MODULE
+      </text>
+      <text x={boxX + BOX_W / 2} y={boxY + 26} textAnchor="middle"
+        fontSize="10" fontWeight="bold" fill="#333333" fontFamily="monospace">
+        {title?.replace(/[^a-z0-9_]/gi, '_').toLowerCase() || 'dut'}
+      </text>
+
+      {/* Input ports */}
+      {inputs.map((p, i) => {
+        const y = midY(i);
+        const portX = boxX;
+        return (
+          <g key={`in-${i}`}>
+            <line x1={LABEL_W} y1={y} x2={portX} y2={y} stroke="#2563EB" strokeWidth="1.5"/>
+            <circle cx={portX} cy={y} r="3" fill="#2563EB"/>
+            <text x={LABEL_W - 4} y={y + 4} textAnchor="end" fontSize="9"
+              fill="#333333" fontFamily="monospace">{p.name}</text>
+            <text x={LABEL_W - 4} y={y - 5} textAnchor="end" fontSize="7"
+              fill="#AAAAAA" fontFamily="monospace">{p.width}</text>
+          </g>
+        );
+      })}
+
+      {/* Output ports */}
+      {outputs.map((p, i) => {
+        const y = midY(i);
+        const portX = boxX + BOX_W;
+        return (
+          <g key={`out-${i}`}>
+            <line x1={portX} y1={y} x2={portX + LABEL_W - 10} y2={y} stroke="#16A34A" strokeWidth="1.5"/>
+            <polygon
+              points={`${portX + LABEL_W - 10},${y} ${portX + LABEL_W - 18},${y - 4} ${portX + LABEL_W - 18},${y + 4}`}
+              fill="#16A34A"/>
+            <text x={portX + 8} y={y + 4} textAnchor="start" fontSize="9"
+              fill="#333333" fontFamily="monospace">{p.name}</text>
+            <text x={portX + 8} y={y - 5} textAnchor="start" fontSize="7"
+              fill="#AAAAAA" fontFamily="monospace">{p.width}</text>
+          </g>
+        );
+      })}
+
+      {/* IN / OUT labels */}
+      {inputs.length > 0 && (
+        <text x={LABEL_W / 2} y={boxY + boxH / 2 + 4} textAnchor="middle"
+          fontSize="8" fontWeight="bold" fill="#BBBBBB" letterSpacing="2">IN</text>
+      )}
+      {outputs.length > 0 && (
+        <text x={boxX + BOX_W + LABEL_W / 2 + 20} y={boxY + boxH / 2 + 4} textAnchor="middle"
+          fontSize="8" fontWeight="bold" fill="#BBBBBB" letterSpacing="2">OUT</text>
+      )}
+    </svg>
+  );
+}
+
+// ─── Simple inline-markdown renderer ─────────────────────────────────────────
+function MarkdownText({ text }) {
+  if (!text) return null;
+  const lines = text.split('\n');
+  const elements = [];
+  let inList = false;
+  let listItems = [];
+
+  const flushList = () => {
+    if (listItems.length) {
+      elements.push(
+        <ul key={`ul-${elements.length}`} className="space-y-1 my-2 pl-4">
+          {listItems.map((item, i) => (
+            <li key={i} className="flex items-start gap-1.5">
+              <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[#CCCCCC] shrink-0"/>
+              <span>{renderInline(item)}</span>
+            </li>
+          ))}
+        </ul>
+      );
+      listItems = [];
+      inList = false;
+    }
+  };
+
+  const renderInline = (str) => {
+    const parts = str.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('**') && part.endsWith('**'))
+        return <strong key={i} className="font-semibold text-[#111111]">{part.slice(2, -2)}</strong>;
+      if (part.startsWith('`') && part.endsWith('`'))
+        return <code key={i} className="font-mono text-xs bg-[#F0F4FF] text-[#2563EB] px-1.5 py-0.5 rounded">{part.slice(1, -1)}</code>;
+      return part;
+    });
+  };
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      inList = true;
+      listItems.push(trimmed.slice(2));
+    } else {
+      if (inList) flushList();
+      if (trimmed === '') {
+        elements.push(<div key={idx} className="h-2"/>);
+      } else {
+        elements.push(
+          <p key={idx} className="text-sm text-[#333333] leading-relaxed">{renderInline(trimmed)}</p>
+        );
+      }
+    }
+  });
+  if (inList) flushList();
+  return <div className="space-y-1">{elements}</div>;
+}
+
+// ─── Explanation markdown renderer (supports headers + code blocks) ───────────
+function ExplanationContent({ text }) {
+  if (!text) return null;
+
+  // Split on code blocks first
+  const segments = text.split(/(```[\s\S]*?```)/g);
+  return (
+    <div className="space-y-4 text-sm text-[#333333] leading-relaxed">
+      {segments.map((seg, i) => {
+        if (seg.startsWith('```')) {
+          const lines = seg.split('\n');
+          const lang = lines[0].replace('```', '').trim() || 'verilog';
+          const code = lines.slice(1, -1).join('\n');
+          return (
+            <div key={i} className="rounded-xl overflow-hidden border border-[#E8E8E8]">
+              <div className="flex items-center justify-between px-3.5 py-2 bg-[#252526] border-b border-[#333]">
+                <span className="text-xs font-mono text-[#888888]">{lang}</span>
+                <button onClick={() => navigator.clipboard?.writeText(code)}
+                  className="text-xs text-[#666666] hover:text-[#CCCCCC]">Copy</button>
+              </div>
+              <pre className="font-mono text-xs bg-[#1e1e1e] text-[#D4D4D4] p-4 overflow-x-auto whitespace-pre leading-relaxed">{code}</pre>
+            </div>
+          );
+        }
+        // Inline text — handle bold headers like **1. Key Insight**
+        const lines = seg.split('\n');
+        return (
+          <div key={i} className="space-y-2">
+            {lines.map((line, li) => {
+              const trimmed = line.trim();
+              if (!trimmed) return <div key={li} className="h-1"/>;
+              // Numbered bold headers: **1. Title**
+              if (/^\*\*\d+\.\s/.test(trimmed)) {
+                const inner = trimmed.replace(/^\*\*/, '').replace(/\*\*$/, '');
+                return (
+                  <h3 key={li} className="font-bold text-[#111111] text-[14px] mt-4 pt-3 border-t border-[#F0F0F0] first:mt-0 first:pt-0 first:border-0">
+                    {inner}
+                  </h3>
+                );
+              }
+              if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+                return (
+                  <div key={li} className="flex items-start gap-2 pl-2">
+                    <span className="mt-2 w-1 h-1 rounded-full bg-[#CCCCCC] shrink-0"/>
+                    <span>{trimmed.slice(2)}</span>
+                  </div>
+                );
+              }
+              // Inline bold / code
+              const parts = trimmed.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+              return (
+                <p key={li}>{parts.map((part, pi) => {
+                  if (part.startsWith('**') && part.endsWith('**'))
+                    return <strong key={pi} className="font-semibold text-[#111111]">{part.slice(2, -2)}</strong>;
+                  if (part.startsWith('`') && part.endsWith('`'))
+                    return <code key={pi} className="font-mono text-xs bg-[#F0F4FF] text-[#2563EB] px-1 py-0.5 rounded">{part.slice(1, -1)}</code>;
+                  return part;
+                })}</p>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 // ─── Waveform Viewer ──────────────────────────────────────────────────────────
 const WAVEFORM_COLORS = ['#2563EB','#16A34A','#D97706','#9333EA','#DB2777','#0891B2','#EA580C','#64748B'];
@@ -113,12 +331,7 @@ function WaveformViewer({ data }) {
   );
 }
 
-// ─── Status pill ──────────────────────────────────────────────────────────────
-const STATUS = {
-  passed: { icon: <CheckCircle2 className="w-3.5 h-3.5"/>, text: 'text-[#16A34A]', bg: 'bg-[#F0FDF4]', border: 'border-[#BBF7D0]', label: 'Passed' },
-  failed: { icon: <XCircle      className="w-3.5 h-3.5"/>, text: 'text-[#DC2626]', bg: 'bg-[#FEF2F2]', border: 'border-[#FECACA]', label: 'Failed' },
-  error:  { icon: <AlertCircle  className="w-3.5 h-3.5"/>, text: 'text-[#D97706]', bg: 'bg-[#FFFBEB]', border: 'border-[#FDE68A]', label: 'Error'  },
-};
+// (Status styles used inline in Result tab)
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ProblemDetailPage() {
@@ -134,13 +347,26 @@ export default function ProblemDetailPage() {
   const [activeTab,  setActiveTab]  = useState('description');
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [saveStatus,   setSaveStatus]   = useState(null);
-  const [history,      setHistory]      = useState(null); // null = not loaded yet
   const [showSignupModal, setShowSignupModal] = useState(false);
 
+  // Adjacent navigation
+  const [adjacent, setAdjacent] = useState(null);
+
+  // Explanation tab
+  const [explanation,     setExplanation]     = useState(null); // null=not loaded, string=loaded
+  const [explanationLoad, setExplanationLoad] = useState(false);
+  const [explanationErr,  setExplanationErr]  = useState('');
+
+  // AI Assistant tab
+  const [aiMessages,  setAiMessages]  = useState([]); // [{role, content}]
+  const [aiInput,     setAiInput]     = useState('');
+  const [aiStreaming, setAiStreaming]  = useState(false);
+  const aiEndRef = useRef(null);
+
   // Panel resize state
-  const [leftPct,   setLeftPct]   = useState(42); // % width of left panel
-  const isDragging  = useRef(false);
-  const dragStartX  = useRef(0);
+  const [leftPct,   setLeftPct]   = useState(42);
+  const isDragging   = useRef(false);
+  const dragStartX   = useRef(0);
   const dragStartPct = useRef(42);
   const containerRef = useRef(null);
 
@@ -168,9 +394,13 @@ export default function ProblemDetailPage() {
     if (savedIndicatorTimerRef.current) clearTimeout(savedIndicatorTimerRef.current);
   }, []);
 
-  // ── Load problem + saved code ──────────────────────────────────────────────
+  // ── Load problem + saved code + adjacent ──────────────────────────────────
   useEffect(() => {
     setLoading(true);
+    setResult(null);
+    setExplanation(null);
+    setExplanationErr('');
+    setAiMessages([]);
     const fetches = [axios.get(`${API}/api/problems/${id}`)];
     if (user) fetches.push(axios.get(`${API}/api/user-code/${id}`, { withCredentials: true }));
 
@@ -185,16 +415,32 @@ export default function ProblemDetailPage() {
         setCode(prob.starter_code || DEFAULT_CODE.verilog);
       }
     }).finally(() => setLoading(false));
+
+    // Fetch adjacent problems (no auth required)
+    axios.get(`${API}/api/problems/${id}/adjacent`)
+      .then(r => setAdjacent(r.data))
+      .catch(() => setAdjacent(null));
   }, [id, navigate, user]);
 
-  // ── Load history when that tab is first opened (auth users only) ───────────
+  // ── Auto-scroll AI chat ────────────────────────────────────────────────────
   useEffect(() => {
-    if (activeTab === 'history' && history === null && user) {
-      axios.get(`${API}/api/submissions/problem/${id}`, { withCredentials: true })
-        .then(r => setHistory(r.data))
-        .catch(() => setHistory([]));
+    if (activeTab === 'ai') aiEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [aiMessages, activeTab]);
+
+  // ── Load explanation when tab first opened ────────────────────────────────
+  useEffect(() => {
+    if (activeTab === 'explanation' && explanation === null && user && !explanationLoad) {
+      setExplanationLoad(true);
+      setExplanationErr('');
+      axios.get(`${API}/api/problems/${id}/explanation`, { withCredentials: true })
+        .then(r => setExplanation(r.data.explanation))
+        .catch(err => {
+          const detail = err.response?.data?.detail || 'Failed to load explanation.';
+          setExplanationErr(detail);
+        })
+        .finally(() => setExplanationLoad(false));
     }
-  }, [activeTab, id, history, user]);
+  }, [activeTab, explanation, id, user, explanationLoad]);
 
   const handleCodeChange = useCallback((val) => {
     const c = val || '';
@@ -210,7 +456,6 @@ export default function ProblemDetailPage() {
   };
 
   const handleSubmit = useCallback(async () => {
-    // Guest users see the signup modal instead of submitting
     if (!user) { setShowSignupModal(true); return; }
     if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
     saveCode(code, language);
@@ -218,7 +463,9 @@ export default function ProblemDetailPage() {
     try {
       const res = await axios.post(`${API}/api/submissions`, { problem_id: id, code, language }, { withCredentials: true });
       setResult(res.data);
-      setHistory(null); // invalidate history cache so it reloads next time
+      // Invalidate explanation cache so it reloads fresh after first submit
+      setExplanation(null);
+      setExplanationErr('');
     } catch (err) {
       setResult({ status: 'error', compilation_error: err.response?.data?.detail || 'Submission failed.' });
     } finally {
@@ -234,6 +481,61 @@ export default function ProblemDetailPage() {
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [submitting]);
+
+  // ── AI chat send ──────────────────────────────────────────────────────────
+  const handleAiSend = useCallback(async () => {
+    const msg = aiInput.trim();
+    if (!msg || aiStreaming) return;
+    setAiInput('');
+    const userMsg = { role: 'user', content: msg };
+    setAiMessages(prev => [...prev, userMsg, { role: 'assistant', content: '' }]);
+    setAiStreaming(true);
+
+    try {
+      const response = await fetch(`${API}/api/problems/${id}/hint`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ code, message: msg }),
+      });
+
+      if (!response.ok) throw new Error('AI request failed');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const chunk = line.slice(6);
+          if (chunk === '[DONE]') break;
+          const text = chunk.replace(/<br>/g, '\n');
+          setAiMessages(prev => {
+            const updated = [...prev];
+            updated[updated.length - 1] = {
+              ...updated[updated.length - 1],
+              content: updated[updated.length - 1].content + text,
+            };
+            return updated;
+          });
+        }
+      }
+    } catch (err) {
+      setAiMessages(prev => {
+        const updated = [...prev];
+        updated[updated.length - 1] = { role: 'assistant', content: 'Sorry, I encountered an error. Please try again.' };
+        return updated;
+      });
+    } finally {
+      setAiStreaming(false);
+    }
+  }, [aiInput, aiStreaming, code, id]);
 
   // ── Draggable panel resize ─────────────────────────────────────────────────
   const onDragStart = useCallback((e) => {
@@ -271,7 +573,7 @@ export default function ProblemDetailPage() {
   );
   if (!problem) return null;
 
-  // Guest trying to open a Medium/Hard problem → show locked screen
+  // Guest trying to open a Medium/Hard problem → locked screen
   const isLocked = !user && problem.difficulty !== 'Easy';
   if (isLocked) return (
     <div className="min-h-screen bg-[#F8F8F8]">
@@ -308,11 +610,15 @@ export default function ProblemDetailPage() {
   const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent);
   const shortcutLabel = isMac ? '⌘↵' : '⌃↵';
 
+  const ports = parsePorts(problem.starter_code || '');
+
+  // Tabs — Explanation + AI only for authenticated users
   const TABS = user ? [
     { id: 'description', label: 'Description' },
     { id: 'testcases',   label: 'Test Cases' },
     { id: 'result',      label: 'Result' },
-    { id: 'history',     label: 'History' },
+    { id: 'explanation', label: 'Explanation' },
+    { id: 'ai',          label: 'AI Assistant' },
   ] : [
     { id: 'description', label: 'Description' },
     { id: 'testcases',   label: 'Test Cases' },
@@ -340,38 +646,69 @@ export default function ProblemDetailPage() {
           style={{ width: `${leftPct}%`, minWidth: 280, maxWidth: '68%' }}
         >
           {/* Problem header */}
-          <div className="px-5 py-4 border-b border-[#EFEFEF] bg-white shrink-0">
-            <div className="flex items-start gap-3">
-              <Link to="/problems" className="mt-0.5 text-[#CCCCCC] hover:text-[#555555] shrink-0 p-0.5 rounded hover:bg-[#F5F5F5]">
+          <div className="px-4 py-3 border-b border-[#EFEFEF] bg-white shrink-0">
+            {/* Navigation row */}
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <Link to="/problems" className="text-[#CCCCCC] hover:text-[#555555] p-0.5 rounded hover:bg-[#F5F5F5] shrink-0">
                 <ChevronLeft className="w-4 h-4"/>
               </Link>
-              <div className="flex-1 min-w-0">
-                <h1 className="text-[15px] font-bold text-[#111111] tracking-tight leading-snug">{problem.title}</h1>
-                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  {problem.difficulty && (
-                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${ds.text} ${ds.bg} ${ds.border}`}>{problem.difficulty}</span>
-                  )}
-                  {(problem.tags||[]).map(t => (
-                    <span key={t} className="text-[11px] text-[#888888] bg-[#F8F8F8] border border-[#E8E8E8] px-2 py-0.5 rounded-md font-mono">{t}</span>
-                  ))}
-                </div>
+
+              {/* Prev / Next in domain */}
+              <div className="flex items-center gap-1 flex-1 justify-end">
+                {adjacent?.domain && (
+                  <span className="text-[10px] text-[#CCCCCC] font-medium hidden sm:block mr-1 truncate max-w-[100px]">
+                    {adjacent.position}/{adjacent.total} in {adjacent.domain}
+                  </span>
+                )}
+                <button
+                  onClick={() => adjacent?.prev_id && navigate(`/problems/${adjacent.prev_id}`)}
+                  disabled={!adjacent?.prev_id}
+                  title={adjacent?.prev_title || 'No previous problem'}
+                  className="p-1 rounded-lg border border-[#E8E8E8] bg-white disabled:opacity-30 hover:enabled:bg-[#F5F5F5] hover:enabled:border-[#D0D0D0] transition-colors"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5 text-[#555555]"/>
+                </button>
+                <button
+                  onClick={() => adjacent?.next_id && navigate(`/problems/${adjacent.next_id}`)}
+                  disabled={!adjacent?.next_id}
+                  title={adjacent?.next_title || 'No next problem'}
+                  className="p-1 rounded-lg border border-[#E8E8E8] bg-white disabled:opacity-30 hover:enabled:bg-[#F5F5F5] hover:enabled:border-[#D0D0D0] transition-colors"
+                >
+                  <ChevronRight className="w-3.5 h-3.5 text-[#555555]"/>
+                </button>
               </div>
+            </div>
+
+            {/* Title + badges */}
+            <h1 className="text-[14px] font-bold text-[#111111] tracking-tight leading-snug mb-1.5">{problem.title}</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              {problem.difficulty && (
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${ds.text} ${ds.bg} ${ds.border}`}>{problem.difficulty}</span>
+              )}
+              {problem.domain && (
+                <span className="text-[11px] text-[#888888] bg-[#F8F8F8] border border-[#E8E8E8] px-2 py-0.5 rounded-md">{problem.domain}</span>
+              )}
+              {(problem.tags||[]).slice(0, 3).map(t => (
+                <span key={t} className="text-[11px] text-[#888888] bg-[#F8F8F8] border border-[#E8E8E8] px-2 py-0.5 rounded-md font-mono">{t}</span>
+              ))}
             </div>
           </div>
 
           {/* Tabs */}
-          <div className="flex border-b border-[#EFEFEF] px-2 bg-white shrink-0">
+          <div className="flex border-b border-[#EFEFEF] px-2 bg-white shrink-0 overflow-x-auto">
             {TABS.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative px-3 py-3 text-[13px] font-medium transition-colors ${
+                className={`relative px-3 py-3 text-[12px] font-medium transition-colors whitespace-nowrap flex items-center gap-1.5 ${
                   activeTab === tab.id ? 'text-[#111111]' : 'text-[#999999] hover:text-[#555555]'
                 }`}
               >
+                {tab.id === 'ai' && <MessageCircle className="w-3 h-3"/>}
+                {tab.id === 'explanation' && <BookOpen className="w-3 h-3"/>}
                 {tab.label}
                 {tab.id === 'result' && result && (
-                  <span className={`ml-1.5 inline-block w-1.5 h-1.5 rounded-full align-middle mb-0.5 ${result.status==='passed'?'bg-[#16A34A]':'bg-[#DC2626]'}`}/>
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${result.status==='passed'?'bg-[#16A34A]':'bg-[#DC2626]'}`}/>
                 )}
                 {activeTab === tab.id && (
                   <span className="absolute bottom-0 left-3 right-3 h-[2px] bg-[#111111] rounded-t-full"/>
@@ -380,24 +717,89 @@ export default function ProblemDetailPage() {
             ))}
           </div>
 
-          {/* Tab panels — all in DOM, CSS-toggled for instant switching */}
+          {/* Tab panels */}
           <div className="flex-1 relative overflow-hidden">
 
-            {/* Description */}
-            <div className={`absolute inset-0 overflow-y-auto p-5 space-y-5 ${activeTab!=='description'?'hidden':''}`}>
-              <div>
-                <p className="text-[9px] font-bold tracking-[0.14em] text-[#BBBBBB] uppercase mb-3">Description</p>
-                <div className="text-[#333333] leading-relaxed text-sm whitespace-pre-wrap">{problem.description}</div>
+            {/* ── Description ─────────────────────────────────────────── */}
+            <div className={`absolute inset-0 overflow-y-auto ${activeTab!=='description'?'hidden':''}`}>
+              <div className="p-5 space-y-5">
+
+                {/* Overview */}
+                <section>
+                  <p className="text-[9px] font-bold tracking-[0.14em] text-[#BBBBBB] uppercase mb-3">Overview</p>
+                  <MarkdownText text={problem.description}/>
+                </section>
+
+                {/* Interface / Port Table */}
+                {ports.length > 0 && (
+                  <section>
+                    <p className="text-[9px] font-bold tracking-[0.14em] text-[#BBBBBB] uppercase mb-3">Interface</p>
+                    <div className="rounded-xl border border-[#E8E8E8] overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-[#FAFAFA] border-b border-[#E8E8E8]">
+                            <th className="text-left px-3.5 py-2 font-semibold text-[#888888] w-1/3">Port</th>
+                            <th className="text-left px-3.5 py-2 font-semibold text-[#888888] w-1/5">Dir</th>
+                            <th className="text-left px-3.5 py-2 font-semibold text-[#888888]">Width</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#F5F5F5]">
+                          {ports.map((p, i) => (
+                            <tr key={i} className="hover:bg-[#FAFAFA]">
+                              <td className="px-3.5 py-2 font-mono text-[#111111] font-semibold">{p.name}</td>
+                              <td className="px-3.5 py-2">
+                                <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  p.dir === 'input'
+                                    ? 'bg-[#EFF6FF] text-[#2563EB] border border-[#BFDBFE]'
+                                    : 'bg-[#F0FDF4] text-[#16A34A] border border-[#BBF7D0]'
+                                }`}>
+                                  {p.dir === 'input' ? '→' : '←'} {p.dir}
+                                </span>
+                              </td>
+                              <td className="px-3.5 py-2 font-mono text-[#888888]">{p.width}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                )}
+
+                {/* Block Diagram */}
+                {ports.length > 0 && (
+                  <section>
+                    <p className="text-[9px] font-bold tracking-[0.14em] text-[#BBBBBB] uppercase mb-3">Block Diagram</p>
+                    <div className="bg-[#FAFAFA] border border-[#E8E8E8] rounded-xl p-4 overflow-x-auto">
+                      <BlockDiagram ports={ports} title={problem.title}/>
+                    </div>
+                  </section>
+                )}
+
+                {/* Constraints */}
+                {problem.constraints && (
+                  <section>
+                    <p className="text-[9px] font-bold tracking-[0.14em] text-[#BBBBBB] uppercase mb-3">Constraints</p>
+                    <div className="bg-[#FAFAFA] border border-[#E8E8E8] rounded-xl p-3.5">
+                      <MarkdownText text={problem.constraints}/>
+                    </div>
+                  </section>
+                )}
+
+                {/* Companies */}
+                {(problem.companies||[]).length > 0 && (
+                  <section>
+                    <p className="text-[9px] font-bold tracking-[0.14em] text-[#BBBBBB] uppercase mb-2.5">Asked by</p>
+                    <div className="flex flex-wrap gap-2">
+                      {problem.companies.map(c => (
+                        <span key={c} className="text-xs font-semibold text-[#555555] bg-[#F5F5F5] border border-[#E8E8E8] px-2.5 py-1 rounded-lg">{c}</span>
+                      ))}
+                    </div>
+                  </section>
+                )}
               </div>
-              {problem.constraints && (
-                <div>
-                  <p className="text-[9px] font-bold tracking-[0.14em] text-[#BBBBBB] uppercase mb-2.5">Constraints</p>
-                  <div className="bg-[#FAFAFA] border border-[#E8E8E8] rounded-xl p-3.5 font-mono text-xs text-[#444444] whitespace-pre-wrap leading-relaxed">{problem.constraints}</div>
-                </div>
-              )}
             </div>
 
-            {/* Test Cases */}
+            {/* ── Test Cases ──────────────────────────────────────────── */}
             <div className={`absolute inset-0 overflow-y-auto p-5 space-y-3 ${activeTab!=='testcases'?'hidden':''}`}>
               <p className="text-[9px] font-bold tracking-[0.14em] text-[#BBBBBB] uppercase mb-1">Visible Test Cases</p>
               {(problem.testcases||[]).filter(tc=>!tc.is_hidden).map((tc,i)=>(
@@ -425,7 +827,7 @@ export default function ProblemDetailPage() {
               )}
             </div>
 
-            {/* Result */}
+            {/* ── Result ──────────────────────────────────────────────── */}
             <div className={`absolute inset-0 overflow-y-auto p-5 ${activeTab!=='result'?'hidden':''}`}>
               {submitting ? (
                 <div className="flex flex-col items-center justify-center h-full gap-4 py-16">
@@ -445,7 +847,7 @@ export default function ProblemDetailPage() {
                     {result.status==='passed' ? <CheckCircle className="w-5 h-5 text-[#16A34A] shrink-0"/> :
                      result.status==='failed' ? <XCircle className="w-5 h-5 text-[#DC2626] shrink-0"/> :
                      <AlertCircle className="w-5 h-5 text-[#D97706] shrink-0"/>}
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <div className={`font-bold text-sm ${
                         result.status==='passed'?'text-[#166534]':result.status==='failed'?'text-[#991B1B]':'text-[#92400E]'
                       }`}>
@@ -457,6 +859,15 @@ export default function ProblemDetailPage() {
                         }`}>{result.passed_count} / {result.total_count} test cases</div>
                       )}
                     </div>
+                    {/* After first submission, nudge to explanation */}
+                    {user && (
+                      <button
+                        onClick={() => setActiveTab('explanation')}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-[#555555] hover:text-[#111111] px-2.5 py-1.5 rounded-lg border border-[#E8E8E8] bg-white hover:bg-[#F5F5F5] transition-colors shrink-0"
+                      >
+                        <BookOpen className="w-3 h-3"/> Explanation
+                      </button>
+                    )}
                   </div>
 
                   {result.compilation_error && (
@@ -520,51 +931,143 @@ export default function ProblemDetailPage() {
               )}
             </div>
 
-            {/* History */}
-            <div className={`absolute inset-0 overflow-y-auto p-5 ${activeTab!=='history'?'hidden':''}`}>
-              <p className="text-[9px] font-bold tracking-[0.14em] text-[#BBBBBB] uppercase mb-3">Submission History</p>
-              {history === null ? (
-                <div className="space-y-2">
-                  {[...Array(5)].map((_,i)=><div key={i} className="h-12 rounded-xl shimmer"/>)}
-                </div>
-              ) : history.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <Circle className="w-8 h-8 text-[#EEEEEE] mb-3"/>
-                  <p className="text-[#888888] text-sm font-semibold">No submissions yet</p>
-                  <p className="text-[#CCCCCC] text-xs mt-1">Submit your code to see history here</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {history.map((s,i) => {
-                    const cfg = STATUS[s.status] || STATUS.error;
-                    return (
-                      <Link
-                        key={s.submission_id}
-                        to={`/submissions/${s.submission_id}`}
-                        className="flex items-center gap-3 p-3 rounded-xl border border-[#F0F0F0] hover:border-[#E0E0E0] hover:bg-[#FAFAFA] transition-all group"
+            {/* ── Explanation ─────────────────────────────────────────── */}
+            {user && (
+              <div className={`absolute inset-0 overflow-y-auto p-5 ${activeTab!=='explanation'?'hidden':''}`}>
+                {explanationLoad ? (
+                  <div className="flex flex-col items-center justify-center h-full gap-3 py-16">
+                    <div className="w-8 h-8 rounded-full border-2 border-[#E8E8E8] border-t-[#111111] animate-spin"/>
+                    <p className="text-xs text-[#AAAAAA]">Generating explanation…</p>
+                  </div>
+                ) : explanationErr ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center py-16">
+                    <div className="w-14 h-14 rounded-2xl bg-[#FEF2F2] border border-[#FECACA] flex items-center justify-center mx-auto mb-4">
+                      <Lock className="w-6 h-6 text-[#DC2626]"/>
+                    </div>
+                    <p className="text-[#555555] text-sm font-semibold mb-1">
+                      {explanationErr.includes('Submit') ? 'Submit first to unlock' : 'Explanation unavailable'}
+                    </p>
+                    <p className="text-[#AAAAAA] text-xs mt-1 mb-5 max-w-xs leading-relaxed">{explanationErr}</p>
+                    {explanationErr.includes('Submit') && (
+                      <button
+                        onClick={handleSubmit}
+                        className="inline-flex items-center gap-1.5 bg-[#111111] text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-[#2A2A2A] shadow-btn"
                       >
-                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-lg border shrink-0 ${cfg.text} ${cfg.bg} ${cfg.border}`}>
-                          {cfg.icon} {cfg.label}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-mono text-[#888888]">
-                              {s.passed_count != null ? `${s.passed_count}/${s.total_count} tests` : ''}
-                            </span>
-                            <span className="text-[10px] text-[#CCCCCC] font-mono capitalize">{s.language}</span>
-                          </div>
+                        <Play className="w-3.5 h-3.5"/> Submit your code
+                      </button>
+                    )}
+                  </div>
+                ) : explanation ? (
+                  <div>
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-7 h-7 rounded-lg bg-[#F0FDF4] border border-[#BBF7D0] flex items-center justify-center">
+                        <BookOpen className="w-3.5 h-3.5 text-[#16A34A]"/>
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-bold text-[#111111]">Solution Walkthrough</p>
+                        <p className="text-[10px] text-[#AAAAAA]">AI-generated explanation</p>
+                      </div>
+                    </div>
+                    <ExplanationContent text={explanation}/>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-center py-16">
+                    <div className="w-14 h-14 rounded-2xl bg-[#F5F5F5] flex items-center justify-center mb-4">
+                      <BookOpen className="w-6 h-6 text-[#CCCCCC]"/>
+                    </div>
+                    <p className="text-[#555555] text-sm font-semibold">Solution Explanation</p>
+                    <p className="text-[#AAAAAA] text-xs mt-1 mb-5">Submit your code first to unlock the walkthrough</p>
+                    <button
+                      onClick={handleSubmit}
+                      className="inline-flex items-center gap-1.5 bg-[#111111] text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-[#2A2A2A] shadow-btn"
+                    >
+                      <Play className="w-3.5 h-3.5"/> Submit your code
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── AI Assistant ─────────────────────────────────────────── */}
+            {user && (
+              <div className={`absolute inset-0 flex flex-col ${activeTab!=='ai'?'hidden':''}`}>
+                {/* Chat history */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  {aiMessages.length === 0 && (
+                    <div className="flex flex-col items-center justify-center h-full text-center py-8">
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#F0F4FF] to-[#E0ECFF] border border-[#BFDBFE] flex items-center justify-center mb-3">
+                        <Lightbulb className="w-5 h-5 text-[#2563EB]"/>
+                      </div>
+                      <p className="text-[#555555] text-sm font-semibold">AI Hint Assistant</p>
+                      <p className="text-[#AAAAAA] text-xs mt-1 leading-relaxed max-w-[220px]">Ask for a hint, explain what you've tried, or share your code to get targeted feedback.</p>
+                      {/* Suggested prompts */}
+                      <div className="mt-4 space-y-2 w-full max-w-xs">
+                        {[
+                          "Give me a hint to get started",
+                          "What approach should I use?",
+                          "Review my current code",
+                        ].map((prompt) => (
+                          <button
+                            key={prompt}
+                            onClick={() => setAiInput(prompt)}
+                            className="w-full text-left text-xs text-[#555555] bg-[#FAFAFA] border border-[#E8E8E8] px-3 py-2 rounded-xl hover:bg-white hover:border-[#D0D0D0] transition-colors flex items-center justify-between group"
+                          >
+                            {prompt}
+                            <ArrowRight className="w-3 h-3 text-[#CCCCCC] group-hover:text-[#888888]"/>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {aiMessages.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      {msg.role === 'assistant' && (
+                        <div className="w-6 h-6 rounded-lg bg-[#F0F4FF] border border-[#BFDBFE] flex items-center justify-center mr-2 mt-0.5 shrink-0">
+                          <Lightbulb className="w-3 h-3 text-[#2563EB]"/>
                         </div>
-                        <div className="flex items-center gap-1 text-xs text-[#CCCCCC] shrink-0">
-                          <Clock className="w-3 h-3"/>
-                          {new Date(s.submitted_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
-                        </div>
-                        <ChevronDown className="w-3.5 h-3.5 text-[#DDDDDD] group-hover:text-[#888888] -rotate-90"/>
-                      </Link>
-                    );
-                  })}
+                      )}
+                      <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed ${
+                        msg.role === 'user'
+                          ? 'bg-[#111111] text-white rounded-br-sm'
+                          : 'bg-[#F5F5F5] border border-[#E8E8E8] text-[#333333] rounded-bl-sm'
+                      }`}>
+                        {msg.content || (aiStreaming && i === aiMessages.length - 1 ? (
+                          <span className="flex items-center gap-1">
+                            <span className="w-1 h-1 bg-[#888888] rounded-full animate-bounce" style={{animationDelay:'0ms'}}/>
+                            <span className="w-1 h-1 bg-[#888888] rounded-full animate-bounce" style={{animationDelay:'150ms'}}/>
+                            <span className="w-1 h-1 bg-[#888888] rounded-full animate-bounce" style={{animationDelay:'300ms'}}/>
+                          </span>
+                        ) : '')}
+                      </div>
+                    </div>
+                  ))}
+                  <div ref={aiEndRef}/>
                 </div>
-              )}
-            </div>
+
+                {/* Input bar */}
+                <div className="shrink-0 px-3 py-3 border-t border-[#EFEFEF] bg-white">
+                  <div className="flex items-end gap-2">
+                    <textarea
+                      value={aiInput}
+                      onChange={e => setAiInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAiSend(); } }}
+                      placeholder="Ask for a hint… (Enter to send, Shift+Enter for newline)"
+                      rows={2}
+                      className="flex-1 resize-none text-xs bg-[#FAFAFA] border border-[#E4E4E4] rounded-xl px-3 py-2.5 text-[#111111] placeholder-[#CCCCCC] focus:outline-none focus:border-[#111111] focus:ring-2 focus:ring-[#111111]/10 transition-all leading-relaxed"
+                    />
+                    <button
+                      onClick={handleAiSend}
+                      disabled={!aiInput.trim() || aiStreaming}
+                      className="p-2.5 bg-[#111111] hover:bg-[#2A2A2A] disabled:opacity-40 text-white rounded-xl transition-colors shrink-0"
+                    >
+                      {aiStreaming ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-[#CCCCCC] mt-1.5 text-center">AI gives hints, not full solutions</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
