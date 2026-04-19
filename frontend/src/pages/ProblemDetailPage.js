@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { API } from '../App';
+import { API, useAuth } from '../App';
 import Navbar from '../components/Navbar';
+import SignupModal from '../components/SignupModal';
 import Editor from '@monaco-editor/react';
 import {
   Play, ChevronLeft, CheckCircle, XCircle, AlertCircle,
   Loader2, Download, ChevronDown, ZoomIn, ZoomOut,
-  Clock, CheckCircle2, Circle,
+  Clock, CheckCircle2, Circle, Lock,
 } from 'lucide-react';
 
 const DIFF_STYLE = {
@@ -123,6 +124,7 @@ const STATUS = {
 export default function ProblemDetailPage() {
   const { id }     = useParams();
   const navigate   = useNavigate();
+  const { user }   = useAuth();
   const [problem,    setProblem]    = useState(null);
   const [code,       setCode]       = useState('');
   const [language,   setLanguage]   = useState('verilog');
@@ -133,6 +135,7 @@ export default function ProblemDetailPage() {
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [saveStatus,   setSaveStatus]   = useState(null);
   const [history,      setHistory]      = useState(null); // null = not loaded yet
+  const [showSignupModal, setShowSignupModal] = useState(false);
 
   // Panel resize state
   const [leftPct,   setLeftPct]   = useState(42); // % width of left panel
@@ -168,30 +171,30 @@ export default function ProblemDetailPage() {
   // ── Load problem + saved code ──────────────────────────────────────────────
   useEffect(() => {
     setLoading(true);
-    Promise.allSettled([
-      axios.get(`${API}/api/problems/${id}`, { withCredentials: true }),
-      axios.get(`${API}/api/user-code/${id}`, { withCredentials: true }),
-    ]).then(([pR, cR]) => {
+    const fetches = [axios.get(`${API}/api/problems/${id}`)];
+    if (user) fetches.push(axios.get(`${API}/api/user-code/${id}`, { withCredentials: true }));
+
+    Promise.allSettled(fetches).then(([pR, cR]) => {
       if (pR.status === 'rejected') { navigate('/problems'); return; }
       const prob = pR.value.data;
       setProblem(prob);
-      if (cR.status === 'fulfilled' && cR.value.data?.code) {
+      if (cR && cR.status === 'fulfilled' && cR.value.data?.code) {
         setCode(cR.value.data.code);
         if (cR.value.data.language) { setLanguage(cR.value.data.language); langRef.current = cR.value.data.language; }
       } else {
         setCode(prob.starter_code || DEFAULT_CODE.verilog);
       }
     }).finally(() => setLoading(false));
-  }, [id, navigate]);
+  }, [id, navigate, user]);
 
-  // ── Load history when that tab is first opened ─────────────────────────────
+  // ── Load history when that tab is first opened (auth users only) ───────────
   useEffect(() => {
-    if (activeTab === 'history' && history === null) {
+    if (activeTab === 'history' && history === null && user) {
       axios.get(`${API}/api/submissions/problem/${id}`, { withCredentials: true })
         .then(r => setHistory(r.data))
         .catch(() => setHistory([]));
     }
-  }, [activeTab, id, history]);
+  }, [activeTab, id, history, user]);
 
   const handleCodeChange = useCallback((val) => {
     const c = val || '';
@@ -207,6 +210,8 @@ export default function ProblemDetailPage() {
   };
 
   const handleSubmit = useCallback(async () => {
+    // Guest users see the signup modal instead of submitting
+    if (!user) { setShowSignupModal(true); return; }
     if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
     saveCode(code, language);
     setSubmitting(true); setResult(null); setActiveTab('result');
@@ -219,7 +224,7 @@ export default function ProblemDetailPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [id, code, language, saveCode]);
+  }, [id, code, language, saveCode, user]);
 
   useEffect(() => { submitRef.current = handleSubmit; }, [handleSubmit]);
 
@@ -266,18 +271,62 @@ export default function ProblemDetailPage() {
   );
   if (!problem) return null;
 
+  // Guest trying to open a Medium/Hard problem → show locked screen
+  const isLocked = !user && problem.difficulty !== 'Easy';
+  if (isLocked) return (
+    <div className="min-h-screen bg-[#F8F8F8]">
+      <Navbar />
+      <div className="max-w-xl mx-auto px-6 py-20 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-[#F0F0F0] flex items-center justify-center mx-auto mb-6">
+          <Lock className="w-7 h-7 text-[#AAAAAA]" />
+        </div>
+        <h1 className="text-2xl font-extrabold text-[#111111] tracking-tight mb-2">{problem.title}</h1>
+        <div className="flex items-center justify-center gap-2 mb-6">
+          {problem.difficulty && (() => { const d = DIFF_STYLE[problem.difficulty] || {}; return (
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${d.text} ${d.bg} ${d.border}`}>{problem.difficulty}</span>
+          );})()}
+        </div>
+        <p className="text-[#888888] text-sm leading-relaxed mb-8">
+          Medium and Hard problems require a free account. Sign up to unlock this problem and track your progress.
+        </p>
+        <Link to="/register" className="inline-block bg-[#111111] text-white text-sm font-semibold px-6 py-2.5 rounded-xl hover:bg-[#2A2A2A] shadow-btn mb-3 transition-colors">
+          Create free account
+        </Link>
+        <div className="text-sm text-[#888888]">
+          Already have one? <Link to="/login" className="text-[#111111] font-semibold hover:underline">Sign in</Link>
+        </div>
+        <div className="mt-8">
+          <Link to="/problems" className="text-xs text-[#AAAAAA] hover:text-[#666666] transition-colors">
+            ← Browse free Easy problems
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+
   const ds  = DIFF_STYLE[problem.difficulty] || {};
   const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent);
   const shortcutLabel = isMac ? '⌘↵' : '⌃↵';
 
-  const TABS = [
+  const TABS = user ? [
     { id: 'description', label: 'Description' },
     { id: 'testcases',   label: 'Test Cases' },
     { id: 'result',      label: 'Result' },
     { id: 'history',     label: 'History' },
+  ] : [
+    { id: 'description', label: 'Description' },
+    { id: 'testcases',   label: 'Test Cases' },
+    { id: 'result',      label: 'Result' },
   ];
 
   return (
+    <>
+    {showSignupModal && (
+      <SignupModal
+        onClose={() => setShowSignupModal(false)}
+        problemTitle={problem.title}
+      />
+    )}
     <div className="min-h-screen bg-[#F8F8F8] flex flex-col">
       <Navbar />
       <div
@@ -606,5 +655,6 @@ export default function ProblemDetailPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

@@ -110,8 +110,8 @@ export default function App() {
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password"  element={<ResetPasswordPage />} />
             <Route path="/dashboard"       element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
-            <Route path="/problems"        element={<PrivateRoute><ProblemsPage /></PrivateRoute>} />
-            <Route path="/problems/:id"    element={<PrivateRoute><ProblemDetailPage /></PrivateRoute>} />
+            <Route path="/problems"        element={<ProblemsPage />} />
+            <Route path="/problems/:id"    element={<ProblemDetailPage />} />
             <Route path="/submissions/:id" element={<PrivateRoute><SubmissionPage /></PrivateRoute>} />
             <Route path="/admin"           element={<AdminRoute><AdminPage /></AdminRoute>} />
             <Route path="/profile"        element={<PrivateRoute><ProfilePage /></PrivateRoute>} />

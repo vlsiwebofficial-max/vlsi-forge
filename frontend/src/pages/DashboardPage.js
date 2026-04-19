@@ -13,6 +13,8 @@ const DOMAIN_COLOR = {
   'Debug & Analysis':     '#D97706',
   'Programming':          '#DB2777',
   'Timing & Power':       '#0891B2',
+  'DFT':                  '#DC2626',
+  'Physical Design':      '#7C3AED',
 };
 
 function relativeTime(iso) {

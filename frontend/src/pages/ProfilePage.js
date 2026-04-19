@@ -6,12 +6,14 @@ import Navbar from '../components/Navbar';
 import { CheckCircle, XCircle, Zap, ArrowRight, Trophy } from 'lucide-react';
 
 const DOMAIN_COLOR = {
-  'RTL Design':          '#2563EB',
-  'Design Verification': '#16A34A',
+  'RTL Design':           '#2563EB',
+  'Design Verification':  '#16A34A',
   'Computer Architecture':'#9333EA',
-  'Debug & Analysis':    '#D97706',
-  'Programming':         '#DB2777',
-  'Timing & Power':      '#0891B2',
+  'Debug & Analysis':     '#D97706',
+  'Programming':          '#DB2777',
+  'Timing & Power':       '#0891B2',
+  'DFT':                  '#DC2626',
+  'Physical Design':      '#7C3AED',
 };
 
 const DIFF_STYLE = {

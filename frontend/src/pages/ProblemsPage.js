@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { API } from '../App';
+import { API, useAuth } from '../App';
 import { cachedGet } from '../utils/apiCache';
 import Navbar from '../components/Navbar';
-import { Search, ChevronRight, CheckCircle2, Circle, ChevronLeft } from 'lucide-react';
+import { Search, ChevronRight, CheckCircle2, Circle, ChevronLeft, Lock } from 'lucide-react';
 
 // ─── Domain config (no "All" — topics are first-class) ──────────────────────
 const DOMAINS = [
@@ -71,15 +71,31 @@ const DOMAINS = [
     ),
   },
   {
-    id: 'Timing & Power',
-    label: 'Timing & Power',
-    desc: 'Static timing analysis, clock domains and low-power design',
-    color: '#0891B2',
-    bg: '#ECFEFF',
+    id: 'DFT',
+    label: 'DFT',
+    desc: 'Design for Testability — scan chains, BIST, JTAG TAP controller design',
+    color: '#DC2626',
+    bg: '#FEF2F2',
     Icon: () => (
       <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="1.8"/>
-        <path d="M11 7V11L14 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M4 11H18M4 7H8M14 7H18M4 15H8M14 15H18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+        <circle cx="11" cy="7" r="2" stroke="currentColor" strokeWidth="1.6"/>
+        <circle cx="11" cy="15" r="2" stroke="currentColor" strokeWidth="1.6"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'Physical Design',
+    label: 'Physical Design',
+    desc: 'CDC synchronizers, clock gating, floorplan-aware RTL and timing-critical design',
+    color: '#7C3AED',
+    bg: '#F5F3FF',
+    Icon: () => (
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+        <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.7"/>
+        <rect x="12" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.7"/>
+        <rect x="3" y="12" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.7"/>
+        <rect x="12" y="12" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.7"/>
       </svg>
     ),
   },
@@ -155,6 +171,7 @@ function TopicCard({ domain, total, solved, onClick }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ProblemsPage() {
+  const { user } = useAuth();
   const [problems,     setProblems]     = useState([]);
   const [solvedIds,    setSolvedIds]    = useState(new Set());
   const [domainSolved, setDomainSolved] = useState({});
@@ -172,12 +189,13 @@ export default function ProblemsPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [problemsRes, solvedRes] = await Promise.allSettled([
-          cachedGet(`${API}/api/problems`,               { withCredentials: true }),
-          cachedGet(`${API}/api/stats/solved-problems`,  { withCredentials: true }),
-        ]);
+        // Problems list is public; solved-problems requires auth
+        const fetches = [cachedGet(`${API}/api/problems`, {})];
+        if (user) fetches.push(cachedGet(`${API}/api/stats/solved-problems`, { withCredentials: true }));
+
+        const [problemsRes, solvedRes] = await Promise.allSettled(fetches);
         if (problemsRes.status === 'fulfilled') setProblems(problemsRes.value.data);
-        if (solvedRes.status === 'fulfilled') {
+        if (solvedRes && solvedRes.status === 'fulfilled') {
           setSolvedIds(new Set(solvedRes.value.data.solved_ids || []));
           setDomainSolved(solvedRes.value.data.domain_solved || {});
         }
@@ -186,7 +204,7 @@ export default function ProblemsPage() {
       }
     };
     fetchData();
-  }, []);
+  }, [user]);
 
   // 180ms debounce on search
   useEffect(() => {
@@ -266,11 +284,27 @@ export default function ProblemsPage() {
           <p className="text-[10px] font-bold tracking-[0.16em] text-[#BBBBBB] uppercase mb-1.5">Problems</p>
           <h1 className="text-[26px] font-extrabold text-[#111111] tracking-tight">Choose a topic</h1>
           <p className="text-sm text-[#888888] mt-1">
-            {totalSolved > 0
+            {user && totalSolved > 0
               ? `${totalSolved} of ${totalProblems} problems solved across all topics`
               : `${totalProblems} problems across ${DOMAINS.filter(d => domainCounts[d.id]).length} topics`}
           </p>
         </div>
+
+        {/* Guest banner */}
+        {!user && (
+          <div className="mb-6 flex items-center justify-between gap-4 bg-[#111111] text-white rounded-2xl px-5 py-4 animate-fade-up">
+            <div>
+              <p className="text-sm font-bold">Easy problems are free — no sign-up needed</p>
+              <p className="text-xs text-white/50 mt-0.5">Create a free account to unlock Medium &amp; Hard problems and submit your solutions.</p>
+            </div>
+            <Link
+              to="/register"
+              className="shrink-0 text-xs font-semibold bg-white text-[#111111] px-3.5 py-2 rounded-xl hover:bg-[#F0F0F0] transition-colors"
+            >
+              Sign up free
+            </Link>
+          </div>
+        )}
 
         {/* Overall progress bar */}
         {totalProblems > 0 && (
@@ -514,35 +548,52 @@ export default function ProblemsPage() {
                 </thead>
                 <tbody>
                   {filtered.map((p, idx) => {
-                    const solved = solvedIds.has(p.problem_id);
-                    const ds = DIFF_STYLE[p.difficulty] || {};
+                    const solved  = solvedIds.has(p.problem_id);
+                    const ds      = DIFF_STYLE[p.difficulty] || {};
+                    const locked  = !user && p.difficulty !== 'Easy';
                     return (
                       <tr
                         key={p.problem_id}
-                        className="group border-b border-[#F5F5F5] hover:bg-[#F8F8F8] transition-colors"
+                        className={`group border-b border-[#F5F5F5] transition-colors ${locked ? 'opacity-60 cursor-default' : 'hover:bg-[#F8F8F8]'}`}
                       >
-                        {/* Status */}
+                        {/* Status / Lock */}
                         <td className="px-5 py-3.5 w-10">
-                          {solved
-                            ? <CheckCircle2 className="w-4 h-4 text-[#16A34A]" />
-                            : <Circle className="w-4 h-4 text-[#E0E0E0]" />}
+                          {locked
+                            ? <Lock className="w-3.5 h-3.5 text-[#CCCCCC]" />
+                            : solved
+                              ? <CheckCircle2 className="w-4 h-4 text-[#16A34A]" />
+                              : <Circle className="w-4 h-4 text-[#E0E0E0]" />
+                          }
                         </td>
 
                         {/* Title */}
                         <td className="px-4 py-3.5">
-                          <Link
-                            to={`/problems/${p.problem_id}`}
-                            className={`text-sm font-medium transition-colors ${
-                              solved ? 'text-[#AAAAAA] hover:text-[#888888]' : 'text-[#111111] hover:text-[#444444]'
-                            }`}
-                          >
-                            <span className="text-[#CCCCCC] font-mono text-[11px] mr-2 tabular-nums">
-                              {String(idx + 1).padStart(2, '0')}.
-                            </span>
-                            {p.title}
-                          </Link>
+                          {locked ? (
+                            <Link
+                              to="/register"
+                              className="text-sm font-medium text-[#AAAAAA] hover:text-[#888888] transition-colors"
+                            >
+                              <span className="text-[#DDDDDD] font-mono text-[11px] mr-2 tabular-nums">
+                                {String(idx + 1).padStart(2, '0')}.
+                              </span>
+                              {p.title}
+                              <span className="ml-2 text-[10px] font-semibold text-white bg-[#CCCCCC] px-1.5 py-0.5 rounded-full">Sign in to unlock</span>
+                            </Link>
+                          ) : (
+                            <Link
+                              to={`/problems/${p.problem_id}`}
+                              className={`text-sm font-medium transition-colors ${
+                                solved ? 'text-[#AAAAAA] hover:text-[#888888]' : 'text-[#111111] hover:text-[#444444]'
+                              }`}
+                            >
+                              <span className="text-[#CCCCCC] font-mono text-[11px] mr-2 tabular-nums">
+                                {String(idx + 1).padStart(2, '0')}.
+                              </span>
+                              {p.title}
+                            </Link>
+                          )}
                           {/* Tags — mobile only */}
-                          {(p.tags || []).length > 0 && (
+                          {!locked && (p.tags || []).length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1 sm:hidden">
                               {(p.tags || []).slice(0, 2).map(t => (
                                 <span key={t} className="text-[10px] text-[#AAAAAA] bg-[#F5F5F5] border border-[#EEEEEE] px-1.5 py-0.5 rounded font-mono">{t}</span>
@@ -562,30 +613,32 @@ export default function ProblemsPage() {
 
                         {/* Companies */}
                         <td className="px-4 py-3.5 hidden lg:table-cell">
-                          <div className="flex items-center gap-1">
-                            {(p.companies || []).slice(0, 3).map(co => (
-                              <button
-                                key={co}
-                                onClick={() => setActiveCompany(activeCompany === co ? null : co)}
-                                className={`text-[10px] font-mono px-1.5 py-0.5 rounded border transition-colors ${
-                                  activeCompany === co
-                                    ? 'border-[#111111] bg-[#111111] text-white'
-                                    : 'border-[#E8E8E8] text-[#AAAAAA] hover:border-[#D0D0D0] hover:text-[#555555]'
-                                }`}
-                                title={co}
-                              >
-                                {CO_ABBR[co] || co}
-                              </button>
-                            ))}
-                            {(p.companies || []).length > 3 && (
-                              <span className="text-[10px] text-[#CCCCCC] font-mono">+{(p.companies || []).length - 3}</span>
-                            )}
-                          </div>
+                          {!locked && (
+                            <div className="flex items-center gap-1">
+                              {(p.companies || []).slice(0, 3).map(co => (
+                                <button
+                                  key={co}
+                                  onClick={() => setActiveCompany(activeCompany === co ? null : co)}
+                                  className={`text-[10px] font-mono px-1.5 py-0.5 rounded border transition-colors ${
+                                    activeCompany === co
+                                      ? 'border-[#111111] bg-[#111111] text-white'
+                                      : 'border-[#E8E8E8] text-[#AAAAAA] hover:border-[#D0D0D0] hover:text-[#555555]'
+                                  }`}
+                                  title={co}
+                                >
+                                  {CO_ABBR[co] || co}
+                                </button>
+                              ))}
+                              {(p.companies || []).length > 3 && (
+                                <span className="text-[10px] text-[#CCCCCC] font-mono">+{(p.companies || []).length - 3}</span>
+                              )}
+                            </div>
+                          )}
                         </td>
 
                         {/* Arrow */}
                         <td className="px-4 py-3.5">
-                          <ChevronRight className="w-4 h-4 text-[#E0E0E0] group-hover:text-[#888888] group-hover:translate-x-0.5 transition-all ml-auto" />
+                          {!locked && <ChevronRight className="w-4 h-4 text-[#E0E0E0] group-hover:text-[#888888] group-hover:translate-x-0.5 transition-all ml-auto" />}
                         </td>
                       </tr>
                     );
