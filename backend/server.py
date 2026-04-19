@@ -268,38 +268,57 @@ async def create_indexes():
     except Exception as e:
         logger.warning(f"Index creation warning (may already exist): {e}")
 
+async def _dedup_problems():
+    """
+    Remove duplicate problem documents that share the same title.
+    Keeps the document with the smallest ObjectId (i.e. earliest inserted).
+    Returns the number of documents deleted.
+    """
+    pipeline = [
+        {"$sort": {"_id": 1}},   # oldest first inside each group
+        {"$group": {
+            "_id": "$title",
+            "keep_id": {"$first": "$_id"},   # oldest _id to keep
+            "all_ids": {"$push": "$_id"},
+            "count":   {"$sum": 1}
+        }},
+        {"$match": {"count": {"$gt": 1}}}
+    ]
+    dupes = await db.problems.aggregate(pipeline).to_list(None)
+    removed = 0
+    for d in dupes:
+        to_delete = [i for i in d["all_ids"] if i != d["keep_id"]]
+        if to_delete:
+            r = await db.problems.delete_many({"_id": {"$in": to_delete}})
+            removed += r.deleted_count
+    return removed
+
+
 @app.on_event("startup")
 async def seed_extended_problems_on_startup():
     """
     Upsert EXTENDED_PROBLEMS into the DB on every deploy.
-    Uses update_one + upsert=True so concurrent startup instances
-    can never create duplicates (the unique title index is the guard).
-    Also deduplicates any existing rows from earlier race conditions.
+    Order matters:
+      1. Dedup first  (cannot create unique index while duplicates exist)
+      2. Create unique index on title
+      3. Upsert new problems with $setOnInsert (idempotent + race-safe)
     """
     try:
-        # ── 1. Ensure a unique index on title (idempotent) ─────────────────
-        await db.problems.create_index("title", unique=True, sparse=True)
-
-        # ── 2. Dedup: if any duplicate titles exist, keep only the oldest ──
-        pipeline = [
-            {"$group": {"_id": "$title", "ids": {"$push": "$_id"}, "count": {"$sum": 1}}},
-            {"$match": {"count": {"$gt": 1}}}
-        ]
-        dupes = await db.problems.aggregate(pipeline).to_list(None)
-        removed = 0
-        for d in dupes:
-            # Keep the first (oldest) _id, delete the rest
-            to_delete = d["ids"][1:]
-            result = await db.problems.delete_many({"_id": {"$in": to_delete}})
-            removed += result.deleted_count
+        # ── 1. Remove any duplicates FIRST ─────────────────────────────────
+        removed = await _dedup_problems()
         if removed:
-            logger.info(f"Deduplication removed {removed} duplicate problem(s)")
+            logger.info(f"Startup dedup: removed {removed} duplicate problem(s)")
+
+        # ── 2. NOW safe to create the unique index ──────────────────────────
+        try:
+            await db.problems.create_index("title", unique=True, sparse=True)
+        except Exception as idx_err:
+            logger.warning(f"Title index warning (may already exist): {idx_err}")
 
         # ── 3. Upsert each seed problem — safe against race conditions ─────
         inserted = 0
         for p in EXTENDED_PROBLEMS:
             now = datetime.now(timezone.utc).isoformat()
-            # Build testcases with IDs (idempotent — only used on insert)
             testcases = [
                 {"testcase_id": f"tc_{uuid.uuid4().hex[:8]}", **tc}
                 for tc in p.get("testcases", [])
@@ -1751,6 +1770,14 @@ async def get_leaderboard(request: Request, limit: int = 50):
 
 
 # ==================== ADMIN ROUTES (Paginated) ====================
+
+@api_router.post("/admin/dedup-problems")
+async def admin_dedup_problems(request: Request):
+    """Remove duplicate problems (same title) immediately. Admin only."""
+    await require_admin(request)
+    removed = await _dedup_problems()
+    return {"removed": removed, "message": f"Deleted {removed} duplicate problem(s)"}
+
 
 @api_router.get("/admin/users")
 async def get_all_users(request: Request, skip: int = 0, limit: int = 50):
