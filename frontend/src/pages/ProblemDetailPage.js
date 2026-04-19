@@ -270,6 +270,80 @@ function ExplanationContent({ text }) {
   );
 }
 
+// ─── Compile / Sim Error Block ────────────────────────────────────────────────
+// Parses iverilog / ghdl stderr and highlights error lines with line numbers.
+function CompileErrorBlock({ error, label }) {
+  if (!error) return null;
+
+  // iverilog: "solution.v:12: error: ..."
+  // ghdl:     "solution.vhd:12:8: error: ..."
+  const lineRe = /^([^:]+):(\d+)(?::\d+)?:\s*(error|warning|note|):\s*(.*)$/i;
+
+  const lines = error.trim().split('\n');
+  const parsed = lines.map(line => {
+    const m = line.match(lineRe);
+    if (m) {
+      return { file: m[1], lineno: m[2], level: m[3].toLowerCase() || 'error', msg: m[4], raw: line };
+    }
+    return { raw: line };
+  });
+
+  const copyText = error;
+  const levelColors = {
+    error:   { text: 'text-[#DC2626]', dot: 'bg-[#DC2626]' },
+    warning: { text: 'text-[#D97706]', dot: 'bg-[#D97706]' },
+    note:    { text: 'text-[#2563EB]', dot: 'bg-[#2563EB]' },
+  };
+
+  return (
+    <div className="rounded-xl overflow-hidden border border-[#FECACA]">
+      <div className="flex items-center justify-between px-4 py-2.5 bg-[#FEF2F2] border-b border-[#FECACA]">
+        <div className="flex items-center gap-2 text-[#DC2626] text-xs font-bold uppercase tracking-wide">
+          <AlertCircle className="w-3.5 h-3.5"/>
+          {label || 'Compilation Error'}
+        </div>
+        <button
+          onClick={() => navigator.clipboard?.writeText(copyText)}
+          className="text-xs text-[#888888] hover:text-[#111111] px-2 py-0.5 rounded transition-colors"
+        >
+          Copy
+        </button>
+      </div>
+      <div className="bg-[#1a1a1a] p-3.5 max-h-64 overflow-y-auto font-mono text-xs leading-relaxed">
+        {parsed.map((line, i) => {
+          if (line.file) {
+            const lc = levelColors[line.level] || levelColors.error;
+            return (
+              <div key={i} className="flex gap-2 mb-1 group">
+                {/* Line number badge */}
+                <span className="shrink-0 text-[#555555] w-8 text-right select-none">{i + 1}</span>
+                <div className="flex-1 min-w-0">
+                  {/* Location chip */}
+                  <span className="inline-flex items-center gap-1 mr-2 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#2a2a2a] text-[#888888]">
+                    <span className={`w-1 h-1 rounded-full ${lc.dot}`}/>
+                    {line.file}:{line.lineno}
+                  </span>
+                  {/* Level */}
+                  <span className={`mr-1.5 font-bold ${lc.text}`}>{line.level}:</span>
+                  {/* Message */}
+                  <span className="text-[#E0E0E0]">{line.msg}</span>
+                </div>
+              </div>
+            );
+          }
+          // Plain / continuation line
+          return (
+            <div key={i} className="flex gap-2 mb-0.5">
+              <span className="shrink-0 text-[#444444] w-8 text-right select-none">{i + 1}</span>
+              <span className="text-[#888888] break-all">{line.raw}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Waveform Viewer ──────────────────────────────────────────────────────────
 const WAVEFORM_COLORS = ['#2563EB','#16A34A','#D97706','#9333EA','#DB2777','#0891B2','#EA580C','#64748B'];
 
@@ -429,9 +503,9 @@ export default function ProblemDetailPage() {
 
   // ── Load explanation when tab first opened ────────────────────────────────
   useEffect(() => {
-    if (activeTab === 'explanation' && explanation === null && user && !explanationLoad) {
+    // Guard: don't re-fire if already loading, already loaded, already errored, or not on tab
+    if (activeTab === 'explanation' && explanation === null && user && !explanationLoad && !explanationErr) {
       setExplanationLoad(true);
-      setExplanationErr('');
       axios.get(`${API}/api/problems/${id}/explanation`, { withCredentials: true })
         .then(r => setExplanation(r.data.explanation))
         .catch(err => {
@@ -440,7 +514,7 @@ export default function ProblemDetailPage() {
         })
         .finally(() => setExplanationLoad(false));
     }
-  }, [activeTab, explanation, id, user, explanationLoad]);
+  }, [activeTab, explanation, id, user, explanationLoad, explanationErr]);
 
   const handleCodeChange = useCallback((val) => {
     const c = val || '';
@@ -499,7 +573,20 @@ export default function ProblemDetailPage() {
         body: JSON.stringify({ code, message: msg }),
       });
 
-      if (!response.ok) throw new Error('AI request failed');
+      if (!response.ok) {
+        let errMsg = 'Something went wrong. Please try again.';
+        if (response.status === 503) {
+          errMsg = '⚙️ AI assistant is not configured on this server yet. Ask the site admin to add the ANTHROPIC_API_KEY.';
+        } else if (response.status === 401 || response.status === 403) {
+          errMsg = 'Please sign in to use the AI assistant.';
+        } else {
+          try {
+            const body = await response.json();
+            errMsg = body.detail || errMsg;
+          } catch (_) {}
+        }
+        throw new Error(errMsg);
+      }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -529,7 +616,7 @@ export default function ProblemDetailPage() {
     } catch (err) {
       setAiMessages(prev => {
         const updated = [...prev];
-        updated[updated.length - 1] = { role: 'assistant', content: 'Sorry, I encountered an error. Please try again.' };
+        updated[updated.length - 1] = { role: 'assistant', content: err.message || 'Something went wrong. Please try again.' };
         return updated;
       });
     } finally {
@@ -871,18 +958,10 @@ export default function ProblemDetailPage() {
                   </div>
 
                   {result.compilation_error && (
-                    <div className="rounded-xl overflow-hidden border border-[#FECACA]">
-                      <div className="flex items-center justify-between px-4 py-2.5 bg-[#FEF2F2] border-b border-[#FECACA]">
-                        <div className="flex items-center gap-2 text-[#DC2626] text-xs font-bold uppercase tracking-wide">
-                          <AlertCircle className="w-3.5 h-3.5"/>
-                          {result.status==='error'?'Compilation Error':'Simulation Error'}
-                        </div>
-                        <button onClick={()=>navigator.clipboard?.writeText(result.compilation_error)} className="text-xs text-[#888888] hover:text-[#111111] px-2 py-0.5 rounded">Copy</button>
-                      </div>
-                      <pre className="font-mono text-xs bg-white p-4 text-[#DC2626] overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
-                        {result.compilation_error.replace(/\/tmp\/[^\s/:]*/g,'<tmp>')}
-                      </pre>
-                    </div>
+                    <CompileErrorBlock
+                      error={result.compilation_error}
+                      label={result.status === 'error' ? 'Compilation Error' : 'Simulation Error'}
+                    />
                   )}
 
                   {result.testcase_results?.length > 0 && !result.compilation_error && (
@@ -895,7 +974,11 @@ export default function ProblemDetailPage() {
                             <span className={`text-xs font-bold ${tc.passed?'text-[#166534]':'text-[#991B1B]'}`}>Test {i+1}</span>
                             {tc.output && <span className="text-[#888888] font-mono text-xs ml-auto"><span className="text-[#AAAAAA]">got:</span> {tc.output.trim()}</span>}
                           </div>
-                          {tc.error && <pre className="ml-5 text-xs font-mono text-[#DC2626] whitespace-pre-wrap">{tc.error}</pre>}
+                          {tc.error && (
+                            <div className="mt-1">
+                              <CompileErrorBlock error={tc.error} label="Simulation Error"/>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

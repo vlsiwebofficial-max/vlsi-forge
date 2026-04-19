@@ -558,6 +558,14 @@ async def compile_and_simulate_verilog(code: str, testbench: str, language: str 
         if rc != 0:
             error_msg = stderr or stdout or "Compilation failed"
             logger.error(f"Compilation error: {error_msg[:500]}")
+            # Clean up temp directory paths so errors reference readable filenames
+            error_msg = (
+                error_msg
+                .replace(str(design_file),    "solution.v")
+                .replace(str(testbench_file), "testbench.v")
+                .replace(temp_dir + "/",      "")
+                .replace(temp_dir,            "")
+            )
             return {"success": False, "error": error_msg, "output": None,
                     "vcd_data": None, "waveform_json": None, "lint_warnings": []}
 
