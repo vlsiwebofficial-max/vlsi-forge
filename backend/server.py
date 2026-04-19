@@ -270,21 +270,62 @@ async def create_indexes():
 
 @app.on_event("startup")
 async def seed_extended_problems_on_startup():
-    """Idempotently upsert EXTENDED_PROBLEMS into the DB on every deploy."""
+    """
+    Upsert EXTENDED_PROBLEMS into the DB on every deploy.
+    Uses update_one + upsert=True so concurrent startup instances
+    can never create duplicates (the unique title index is the guard).
+    Also deduplicates any existing rows from earlier race conditions.
+    """
     try:
+        # ── 1. Ensure a unique index on title (idempotent) ─────────────────
+        await db.problems.create_index("title", unique=True, sparse=True)
+
+        # ── 2. Dedup: if any duplicate titles exist, keep only the oldest ──
+        pipeline = [
+            {"$group": {"_id": "$title", "ids": {"$push": "$_id"}, "count": {"$sum": 1}}},
+            {"$match": {"count": {"$gt": 1}}}
+        ]
+        dupes = await db.problems.aggregate(pipeline).to_list(None)
+        removed = 0
+        for d in dupes:
+            # Keep the first (oldest) _id, delete the rest
+            to_delete = d["ids"][1:]
+            result = await db.problems.delete_many({"_id": {"$in": to_delete}})
+            removed += result.deleted_count
+        if removed:
+            logger.info(f"Deduplication removed {removed} duplicate problem(s)")
+
+        # ── 3. Upsert each seed problem — safe against race conditions ─────
         inserted = 0
         for p in EXTENDED_PROBLEMS:
-            existing = await db.problems.find_one({"title": p["title"]})
-            if not existing:
-                doc = {**p, "problem_id": str(uuid.uuid4())}
-                await db.problems.insert_one(doc)
+            now = datetime.now(timezone.utc).isoformat()
+            # Build testcases with IDs (idempotent — only used on insert)
+            testcases = [
+                {"testcase_id": f"tc_{uuid.uuid4().hex[:8]}", **tc}
+                for tc in p.get("testcases", [])
+            ]
+            doc_on_insert = {
+                "problem_id": f"prob_{uuid.uuid4().hex[:12]}",
+                "testcases": testcases,
+                "created_by": "system",
+                "created_at": now,
+                "updated_at": now,
+                **{k: v for k, v in p.items() if k != "testcases"},
+            }
+            result = await db.problems.update_one(
+                {"title": p["title"]},
+                {"$setOnInsert": doc_on_insert},
+                upsert=True
+            )
+            if result.upserted_id:
                 inserted += 1
+
         if inserted:
-            logger.info(f"Seeded {inserted} extended problems on startup")
+            logger.info(f"Seeded {inserted} new problem(s) on startup")
         else:
-            logger.info("Extended problems already seeded — skipping")
+            logger.info("All problems already present — no new seeds")
     except Exception as e:
-        logger.warning(f"Extended problems seeding warning: {e}")
+        logger.warning(f"Startup seeding warning: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
