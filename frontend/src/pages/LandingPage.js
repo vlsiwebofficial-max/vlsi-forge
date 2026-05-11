@@ -16,8 +16,8 @@ const FEATURES = [
   },
   {
     icon: <BookOpen className="w-4 h-4" />,
-    title: '33 Curated Problems',
-    desc: 'RTL Design, Verification, Computer Architecture, and Debug & Analysis — covering the full spectrum.',
+    title: 'Curated Problem Library',
+    desc: 'RTL Design, Verification, Computer Architecture, DFT, Physical Design, and Debug — covering the full VLSI spectrum.',
   },
   {
     icon: <Trophy className="w-4 h-4" />,
@@ -37,10 +37,12 @@ const FEATURES = [
 ];
 
 const DOMAINS = [
-  { label: 'RTL Design',           count: 20, color: '#2563EB', bg: '#EFF6FF' },
-  { label: 'Design Verification',  count: 5,  color: '#16A34A', bg: '#F0FDF4' },
-  { label: 'Computer Architecture', count: 6, color: '#9333EA', bg: '#FAF5FF' },
-  { label: 'Debug & Analysis',     count: 5,  color: '#D97706', bg: '#FFFBEB' },
+  { label: 'RTL Design',            count: 20, color: '#2563EB', bg: '#EFF6FF' },
+  { label: 'Design Verification',   count: 5,  color: '#16A34A', bg: '#F0FDF4' },
+  { label: 'Computer Architecture', count: 6,  color: '#9333EA', bg: '#FAF5FF' },
+  { label: 'Debug & Analysis',      count: 5,  color: '#D97706', bg: '#FFFBEB' },
+  { label: 'DFT',                   count: 4,  color: '#DC2626', bg: '#FEF2F2' },
+  { label: 'Physical Design',       count: 3,  color: '#7C3AED', bg: '#F5F3FF' },
 ];
 
 export default function LandingPage() {
@@ -56,7 +58,6 @@ export default function LandingPage() {
               <Cpu className="w-[15px] h-[15px] text-white" />
             </div>
             <span className="font-bold text-[#111111] text-[15px] tracking-tight">VLSI Forge</span>
-            <span className="text-[9px] bg-[#F5F5F5] text-[#999999] border border-[#EBEBEB] px-1.5 py-[3px] rounded font-semibold tracking-widest uppercase">Beta</span>
           </div>
           <div className="flex items-center gap-2">
             {user ? (
@@ -120,9 +121,9 @@ export default function LandingPage() {
           {/* Stats row */}
           <div className="flex flex-wrap gap-10 mt-20 pt-10 border-t border-[#EEEEEE]">
             {[
-              { value: '33', label: 'Problems' },
-              { value: '5',  label: 'Domains' },
-              { value: '3',  label: 'Languages' },
+              { value: '43+', label: 'Problems' },
+              { value: '6',   label: 'Domains' },
+              { value: '3',   label: 'Languages' },
               { value: 'Free', label: 'Always' },
             ].map(({ value, label }) => (
               <div key={label}>
@@ -140,13 +141,13 @@ export default function LandingPage() {
           <div className="flex items-end justify-between mb-8 flex-wrap gap-4">
             <div>
               <p className="text-[10px] font-bold tracking-[0.16em] text-[#BBBBBB] uppercase mb-2">Practice tracks</p>
-              <h2 className="text-2xl font-bold text-[#111111] tracking-tight">Four domains. One platform.</h2>
+              <h2 className="text-2xl font-bold text-[#111111] tracking-tight">Six domains. One platform.</h2>
             </div>
             <Link to={user ? '/problems' : '/register'} className="text-sm font-semibold text-[#111111] hover:underline flex items-center gap-1.5">
               Browse all problems <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
             {DOMAINS.map(({ label, count, color, bg }) => (
               <div key={label} className="bg-white border border-[#EEEEEE] rounded-2xl p-5 shadow-card shadow-card-hover cursor-default">
                 <div className="w-8 h-8 rounded-xl mb-4 flex items-center justify-center" style={{ backgroundColor: bg }}>

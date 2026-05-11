@@ -27,9 +27,7 @@ export default function VerifyEmailPage() {
     const newCode = [...code];
     newCode[index] = value.slice(-1);
     setCode(newCode);
-    if (value && index < 5) {
-      inputRefs.current[index + 1]?.focus();
-    }
+    if (value && index < 5) inputRefs.current[index + 1]?.focus();
   };
 
   const handleKeyDown = (index, e) => {
@@ -81,87 +79,95 @@ export default function VerifyEmailPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0E14] flex flex-col items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center gap-2 mb-6">
-            <Cpu className="w-6 h-6 text-[#4A8FE8]" />
-            <span className="font-bold text-[#E8EDF4] text-lg tracking-tight">VLSI Forge</span>
-          </Link>
-          <div className="flex justify-center mb-4">
-            <div className="w-14 h-14 rounded-full bg-[#4A8FE8]/10 flex items-center justify-center">
-              <Mail className="w-7 h-7 text-[#4A8FE8]" />
+    <div className="min-h-screen bg-[#F8F8F8] flex flex-col items-center justify-center px-4">
+      <div className="absolute inset-0 pointer-events-none" style={{
+        background: 'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0,0,0,0.03) 0%, transparent 70%)',
+      }} />
+
+      <div className="relative w-full max-w-[380px] animate-fade-up">
+        {/* Logo */}
+        <div className="text-center mb-7">
+          <Link to="/" className="inline-flex items-center gap-2.5 mb-6">
+            <div className="w-8 h-8 bg-[#111111] rounded-[9px] flex items-center justify-center shadow-btn">
+              <Cpu className="w-4 h-4 text-white" />
             </div>
+            <span className="font-bold text-[#111111] text-lg tracking-tight">VLSI Forge</span>
+          </Link>
+
+          <div className="w-14 h-14 rounded-2xl bg-[#EFF6FF] border border-[#BFDBFE] flex items-center justify-center mx-auto mb-4">
+            <Mail className="w-7 h-7 text-[#2563EB]" />
           </div>
-          <h1 className="text-2xl font-bold text-[#E8EDF4] tracking-tight">Check your email</h1>
-          <p className="text-[#7A8FA8] mt-1 text-sm">
+          <h1 className="text-[22px] font-extrabold text-[#111111] tracking-tight">Check your email</h1>
+          <p className="text-[#888888] mt-1.5 text-sm leading-relaxed">
             We sent a 6-digit code to<br />
-            <span className="text-[#E8EDF4] font-medium">{email}</span>
+            <span className="font-semibold text-[#333333]">{email}</span>
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-[#13171E] border border-[#1E2530] rounded-2xl p-6 space-y-5">
+        {/* Card */}
+        <div className="bg-white border border-[#E4E4E4] rounded-2xl p-7 shadow-card">
           {error && (
-            <div className="flex items-center gap-2 bg-[#EF4444]/10 border border-[#EF4444]/30 text-[#EF4444] text-sm px-3 py-2.5 rounded-lg">
+            <div className="flex items-center gap-2.5 bg-[#FEF2F2] border border-[#FECACA] text-[#DC2626] text-sm px-3.5 py-2.5 rounded-xl mb-5">
               <AlertCircle className="w-4 h-4 shrink-0" />
               {error}
             </div>
           )}
           {resent && (
-            <div className="flex items-center gap-2 bg-[#10B981]/10 border border-[#10B981]/30 text-[#10B981] text-sm px-3 py-2.5 rounded-lg">
+            <div className="flex items-center gap-2.5 bg-[#F0FDF4] border border-[#BBF7D0] text-[#16A34A] text-sm px-3.5 py-2.5 rounded-xl mb-5">
               <CheckCircle className="w-4 h-4 shrink-0" />
-              New code sent! Check your inbox.
+              New code sent — check your inbox.
             </div>
           )}
 
-          <div>
-            <label className="block text-sm font-medium text-[#E8EDF4] mb-3 text-center">
-              Enter verification code
-            </label>
-            <div className="flex gap-2 justify-center" onPaste={handlePaste}>
-              {code.map((digit, i) => (
-                <input
-                  key={i}
-                  ref={el => inputRefs.current[i] = el}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={digit}
-                  onChange={e => handleChange(i, e.target.value)}
-                  onKeyDown={e => handleKeyDown(i, e)}
-                  className="w-11 h-13 text-center text-xl font-bold bg-[#1A1F28] border border-[#1E2530] rounded-lg text-[#E8EDF4] focus:outline-none focus:border-[#4A8FE8] transition-colors"
-                  style={{ height: '52px' }}
-                />
-              ))}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label className="block text-xs font-semibold text-[#333333] mb-3 text-center tracking-wide">
+                Enter verification code
+              </label>
+              <div className="flex gap-2 justify-center" onPaste={handlePaste}>
+                {code.map((digit, i) => (
+                  <input
+                    key={i}
+                    ref={el => inputRefs.current[i] = el}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={e => handleChange(i, e.target.value)}
+                    onKeyDown={e => handleKeyDown(i, e)}
+                    className="w-11 h-12 text-center text-xl font-bold bg-[#FAFAFA] border border-[#E4E4E4] rounded-xl text-[#111111] focus:outline-none focus:border-[#111111] focus:ring-2 focus:ring-[#111111]/10 transition-all"
+                  />
+                ))}
+              </div>
             </div>
-          </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-[#4A8FE8] hover:bg-[#3B7ACC] disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition-colors text-sm"
-          >
-            {loading ? 'Verifying...' : 'Verify email'}
-          </button>
-
-          <p className="text-center text-sm text-[#7A8FA8]">
-            Didn't receive it?{' '}
             <button
-              type="button"
-              onClick={handleResend}
-              disabled={resending}
-              className="text-[#4A8FE8] hover:underline font-medium disabled:opacity-60"
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#111111] hover:bg-[#2A2A2A] disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl shadow-btn text-sm transition-colors"
             >
-              {resending ? 'Sending...' : 'Resend code'}
+              {loading ? 'Verifying…' : 'Verify email'}
             </button>
-          </p>
+          </form>
 
-          <p className="text-center text-sm text-[#7A8FA8]">
-            <Link to="/login" className="text-[#4A8FE8] hover:underline font-medium">
-              Back to sign in
-            </Link>
-          </p>
-        </form>
+          <div className="mt-5 pt-5 border-t border-[#F0F0F0] space-y-2 text-center">
+            <p className="text-sm text-[#888888]">
+              Didn't receive it?{' '}
+              <button
+                onClick={handleResend}
+                disabled={resending}
+                className="text-[#111111] font-semibold hover:underline disabled:opacity-50"
+              >
+                {resending ? 'Sending…' : 'Resend code'}
+              </button>
+            </p>
+            <p className="text-sm text-[#888888]">
+              <Link to="/login" className="text-[#111111] font-semibold hover:underline">
+                Back to sign in
+              </Link>
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -1056,7 +1056,7 @@ async def verify_email(data: VerifyEmailRequest):
         "session_id": f"sess_{uuid.uuid4().hex[:12]}",
         "user_id": user_doc["user_id"],
         "session_token": session_token,
-        "expires_at": (datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRATION_DAYS)).isoformat(),
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRATION_DAYS),  # BSON datetime for TTL index
         "created_at": datetime.now(timezone.utc).isoformat()
     })
 
