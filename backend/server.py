@@ -787,6 +787,9 @@ async def require_admin(request: Request) -> User:
 
 async def send_email(to_email: str, subject: str, html_body: str) -> bool:
     """Send email via Resend HTTP API (works on Railway — no SMTP ports needed)."""
+    if not RESEND_API_KEY:
+        logger.warning(f"RESEND_API_KEY not set — skipping email to {to_email} (subject: {subject})")
+        return False
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(
@@ -850,39 +853,50 @@ async def register(user_data: UserCreate):
     hashed_password = bcrypt.hashpw(user_data.password.encode(), bcrypt.gensalt())
     user_id = f"user_{uuid.uuid4().hex[:12]}"
 
+    # If no email service is configured, auto-verify so users can log in immediately.
+    email_service_available = bool(RESEND_API_KEY)
     user_doc = {
         "user_id": user_id,
         "email": user_data.email,
         "name": user_data.name,
         "password_hash": hashed_password.decode(),
         "role": UserRole.USER.value,
-        "email_verified": False,
+        "email_verified": not email_service_available,  # True when no email service
         "created_at": datetime.now(timezone.utc).isoformat()
     }
 
     await db.users.insert_one(user_doc)
 
-    # Generate and store a 6-digit verification code
-    code = str(secrets.randbelow(900000) + 100000)
-    await db.email_verification_tokens.insert_one({
-        "email": user_data.email,
-        "code": code,
-        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=EMAIL_CODE_EXPIRY_MINUTES),
-        "created_at": datetime.now(timezone.utc)
-    })
+    if email_service_available:
+        # Generate and store a 6-digit verification code
+        code = str(secrets.randbelow(900000) + 100000)
+        await db.email_verification_tokens.insert_one({
+            "email": user_data.email,
+            "code": code,
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=EMAIL_CODE_EXPIRY_MINUTES),
+            "created_at": datetime.now(timezone.utc)
+        })
 
-    # Fire-and-forget — don't block the response on SMTP
-    asyncio.create_task(send_email(
-        user_data.email,
-        "Verify your VLSI Forge email",
-        verification_email_html(user_data.name, code)
-    ))
+        # Fire-and-forget — don't block the response on SMTP
+        asyncio.create_task(send_email(
+            user_data.email,
+            "Verify your VLSI Forge email",
+            verification_email_html(user_data.name, code)
+        ))
 
-    return JSONResponse(content={
-        "requires_verification": True,
-        "email": user_data.email,
-        "message": "Account created. Please check your email for a verification code."
-    })
+        return JSONResponse(content={
+            "requires_verification": True,
+            "email": user_data.email,
+            "message": "Account created. Please check your email for a verification code."
+        })
+    else:
+        # No email service — account is immediately ready
+        logger.info(f"Auto-verified {user_data.email} (RESEND_API_KEY not configured)")
+        return JSONResponse(content={
+            "requires_verification": False,
+            "email": user_data.email,
+            "message": "Account created. You can now sign in."
+        })
 
 
 @api_router.post("/auth/login")
@@ -895,14 +909,27 @@ async def login(credentials: UserLogin):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     if not user_doc.get("email_verified", True):
-        raise HTTPException(status_code=403, detail="EMAIL_NOT_VERIFIED")
+        # If no email service is configured, auto-verify now so the user
+        # isn't permanently locked out (this rescues users who registered
+        # before RESEND_API_KEY was set).
+        if not RESEND_API_KEY:
+            await db.users.update_one(
+                {"user_id": user_doc["user_id"]},
+                {"$set": {"email_verified": True}}
+            )
+            logger.info(f"Auto-verified {credentials.email} at login (no email service configured)")
+        else:
+            raise HTTPException(status_code=403, detail="EMAIL_NOT_VERIFIED")
 
     session_token = f"session_{uuid.uuid4().hex}"
+    session_expiry = datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRATION_DAYS)
     session_doc = {
         "session_id": f"sess_{uuid.uuid4().hex[:12]}",
         "user_id": user_doc["user_id"],
         "session_token": session_token,
-        "expires_at": (datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRATION_DAYS)).isoformat(),
+        # Store as a real datetime object (not isoformat string) so MongoDB's
+        # TTL index actually fires and auto-deletes expired sessions.
+        "expires_at": session_expiry,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
 
@@ -963,7 +990,7 @@ async def google_auth_session(request: Request):
         "session_id": f"sess_{uuid.uuid4().hex[:12]}",
         "user_id": user_id,
         "session_token": session_token,
-        "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=7),  # BSON datetime for TTL index
         "created_at": datetime.now(timezone.utc).isoformat()
     })
 
@@ -3035,10 +3062,29 @@ endmodule
 
 app.include_router(api_router)
 
+# CORS: allow_credentials=True is INCOMPATIBLE with allow_origins=['*'].
+# Browsers will refuse to send cookies if the server replies with
+# "Access-Control-Allow-Origin: *" on a credentialed request.
+# Always list concrete origins — never '*' when credentials are in use.
+_cors_raw = os.environ.get('CORS_ORIGINS', '').strip()
+if not _cors_raw or _cors_raw == '*':
+    # Default: known production domains + local dev
+    _cors_origins = [
+        'https://forge.vlsiweb.com',
+        'https://vlsiweb.com',
+        'https://www.vlsiweb.com',
+        'http://localhost:3000',
+        'http://localhost:3001',
+    ]
+else:
+    _cors_origins = [o.strip() for o in _cors_raw.split(',') if o.strip()]
+
+logger.info(f"CORS allowed origins: {_cors_origins}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

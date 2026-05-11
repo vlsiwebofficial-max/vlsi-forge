@@ -4,7 +4,7 @@ import { useAuth } from '../App';
 import { Cpu, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 export default function RegisterPage() {
-  const { register } = useAuth();
+  const { register, login } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -20,8 +20,13 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       const data = await register(name, email, password);
-      if (data?.requires_verification) navigate('/verify-email', { state: { email } });
-      else navigate('/dashboard');
+      if (data?.requires_verification) {
+        navigate('/verify-email', { state: { email } });
+      } else {
+        // No email verification needed — log the user in immediately
+        const userData = await login(email, password);
+        navigate(userData?.role === 'admin' ? '/admin' : '/dashboard');
+      }
     } catch (err) {
       setError(err.response?.data?.detail || 'Registration failed. Try again.');
     } finally {
