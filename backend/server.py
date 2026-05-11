@@ -493,6 +493,34 @@ def parse_vcd_to_json(vcd_content: str) -> Dict:
     }
 
 
+# ==================== VCD INJECTION ====================
+
+def inject_vcd_dump_if_needed(testbench: str, vcd_filename: str = "waveform.vcd") -> str:
+    """
+    Auto-inject $dumpfile/$dumpvars into a testbench that doesn't have them.
+    Without these commands iverilog/vvp never writes a .vcd file, so no waveform
+    appears in the browser.  We insert a dedicated initial block right before the
+    final `endmodule` so it can't interfere with existing logic.
+    """
+    if "$dumpfile" in testbench or "$dumpvars" in testbench:
+        return testbench  # already handled by the testbench author
+
+    dump_block = (
+        "\n  // --- auto-injected waveform capture ---\n"
+        "  initial begin\n"
+        f'    $dumpfile("{vcd_filename}");\n'
+        "    $dumpvars(0);\n"
+        "  end\n"
+        "  // --- end auto-injection ---\n"
+    )
+
+    idx = testbench.rfind("endmodule")
+    if idx != -1:
+        return testbench[:idx] + dump_block + testbench[idx:]
+    # Fallback: append (shouldn't normally be needed)
+    return testbench + dump_block
+
+
 # ==================== ASYNC SIMULATION ENGINE ====================
 
 async def run_command_async(cmd: List[str], cwd: str, timeout: float = 10) -> tuple:
@@ -537,6 +565,8 @@ async def compile_and_simulate_verilog(code: str, testbench: str, language: str 
         compiled_file = Path(temp_dir) / "simulation.vvp"
 
         design_file.write_text(code)
+        # Ensure testbench always writes a VCD file for browser waveform rendering
+        testbench = inject_vcd_dump_if_needed(testbench, vcd_filename="waveform.vcd")
         testbench_file.write_text(testbench)
 
         # Build iverilog command — add -g2012 for SystemVerilog support
@@ -1652,11 +1682,16 @@ async def submit_code(request: Request, submission_data: SubmissionCreate):
                 vcd_data = result["vcd_data"]
                 waveform_json = result["waveform_json"]
 
+            # Surface simulation stderr (e.g. $error / $fatal calls) so the user
+            # can see runtime messages even when compilation succeeds.
+            sim_err = result.get("stderr", "").strip()
+            is_hidden = testcase["is_hidden"]
             testcase_results.append({
                 "testcase_id": testcase["testcase_id"],
                 "passed": passed,
-                "output": result["output"] if not testcase["is_hidden"] else None,
-                "error": None
+                "output":   result["output"] if not is_hidden else None,
+                "expected": testcase["expected_output"] if not is_hidden else None,
+                "error":    sim_err if sim_err and not passed else None,
             })
             logger.info(f"TC {idx + 1}: {'PASS' if passed else 'FAIL'}")
 

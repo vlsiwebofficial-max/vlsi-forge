@@ -968,12 +968,30 @@ export default function ProblemDetailPage() {
                     <div className="space-y-2">
                       <p className="text-[9px] font-bold tracking-[0.14em] text-[#BBBBBB] uppercase">Test Results</p>
                       {result.testcase_results.map((tc,i)=>(
-                        <div key={i} className={`flex flex-col gap-1 p-3 rounded-xl border text-sm ${tc.passed?'bg-[#F0FDF4] border-[#BBF7D0]':'bg-[#FEF2F2] border-[#FECACA]'}`}>
+                        <div key={i} className={`flex flex-col gap-1.5 p-3 rounded-xl border text-sm ${tc.passed?'bg-[#F0FDF4] border-[#BBF7D0]':'bg-[#FEF2F2] border-[#FECACA]'}`}>
                           <div className="flex items-center gap-2">
                             {tc.passed ? <CheckCircle className="w-3.5 h-3.5 text-[#16A34A] shrink-0"/> : <XCircle className="w-3.5 h-3.5 text-[#DC2626] shrink-0"/>}
                             <span className={`text-xs font-bold ${tc.passed?'text-[#166534]':'text-[#991B1B]'}`}>Test {i+1}</span>
-                            {tc.output && <span className="text-[#888888] font-mono text-xs ml-auto"><span className="text-[#AAAAAA]">got:</span> {tc.output.trim()}</span>}
                           </div>
+                          {/* Failed: show got vs expected side-by-side */}
+                          {!tc.passed && tc.output != null && (
+                            <div className="grid grid-cols-2 gap-2 mt-0.5">
+                              <div>
+                                <p className="text-[9px] font-bold text-[#DC2626] uppercase tracking-wide mb-0.5">Got</p>
+                                <pre className="font-mono text-xs bg-white border border-[#FECACA] rounded-lg p-1.5 text-[#991B1B] overflow-x-auto whitespace-pre-wrap">{tc.output.trim()||'(empty)'}</pre>
+                              </div>
+                              {tc.expected != null && (
+                                <div>
+                                  <p className="text-[9px] font-bold text-[#16A34A] uppercase tracking-wide mb-0.5">Expected</p>
+                                  <pre className="font-mono text-xs bg-white border border-[#BBF7D0] rounded-lg p-1.5 text-[#166534] overflow-x-auto whitespace-pre-wrap">{tc.expected.trim()}</pre>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {/* Passed: show output compactly */}
+                          {tc.passed && tc.output != null && (
+                            <pre className="font-mono text-[10px] text-[#16A34A] bg-white border border-[#BBF7D0] rounded-lg p-1.5 overflow-x-auto whitespace-pre-wrap">{tc.output.trim()}</pre>
+                          )}
                           {tc.error && (
                             <div className="mt-1">
                               <CompileErrorBlock error={tc.error} label="Simulation Error"/>
