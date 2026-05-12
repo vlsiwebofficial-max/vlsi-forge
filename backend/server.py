@@ -1051,7 +1051,11 @@ async def logout(request: Request, response: Response):
     session_token = request.cookies.get("session_token")
     if session_token:
         await db.user_sessions.delete_one({"session_token": session_token})
-    response.delete_cookie(key="session_token", path="/")
+    # Must use same attributes as set_cookie so the browser actually removes it
+    response.delete_cookie(
+        key="session_token", path="/",
+        secure=True, samesite="none", httponly=True
+    )
     return {"message": "Logged out successfully"}
 
 
@@ -1794,7 +1798,8 @@ async def get_waveform_json(submission_id: str):
 async def get_user_stats(request: Request):
     """
     Get current user's statistics using a single aggregation pipeline.
-    Fixes the N+1 query bug in the original implementation.
+    Returns both legacy field names (total_solved, accuracy) and the aliases
+    the frontend expects (problems_solved, acceptance_rate) plus a streak.
     """
     user = await require_auth(request)
 
@@ -1821,17 +1826,22 @@ async def get_user_stats(request: Request):
                         None
                     ]
                 }
-            }
+            },
+            # Collect all submission dates for streak computation
+            "submission_dates": {"$addToSet": "$submitted_at"}
         }}
     ]
 
     result = await db.submissions.aggregate(pipeline).to_list(1)
 
     if not result:
-        return {
-            "total_solved": 0, "easy_solved": 0, "medium_solved": 0,
-            "hard_solved": 0, "total_submissions": 0, "accuracy": 0.0
+        zero = {
+            "total_solved": 0, "problems_solved": 0,
+            "easy_solved": 0, "medium_solved": 0, "hard_solved": 0,
+            "total_submissions": 0, "accuracy": 0.0, "acceptance_rate": 0.0,
+            "streak": 0
         }
+        return zero
 
     agg = result[0]
     total_submissions = agg.get("total_submissions", 0)
@@ -1853,15 +1863,42 @@ async def get_user_stats(request: Request):
     hard_solved = sum(1 for p in unique_passed
                       if p.get("difficulty") in ("Hard", "Very Hard"))
     total_solved = len(unique_passed)
-    accuracy = round((total_solved / total_submissions * 100), 2) if total_submissions > 0 else 0.0
+    # accuracy is 0-100; acceptance_rate is 0-1 (for frontend * 100 display)
+    acceptance_rate = round(total_solved / total_submissions, 4) if total_submissions > 0 else 0.0
+    accuracy = round(acceptance_rate * 100, 2)
+
+    # ── Streak: consecutive days with at least one submission, going backwards from today ──
+    raw_dates = agg.get("submission_dates", [])
+    active_days: set = set()
+    for d in raw_dates:
+        if isinstance(d, datetime):
+            active_days.add(d.astimezone(timezone.utc).date())
+        elif isinstance(d, str):
+            try:
+                active_days.add(datetime.fromisoformat(d).date())
+            except Exception:
+                pass
+
+    streak = 0
+    today = datetime.now(timezone.utc).date()
+    check = today
+    # Allow streak if today OR yesterday has a submission (so timezone gaps don't break it)
+    if check not in active_days:
+        check = today - timedelta(days=1)
+    while check in active_days:
+        streak += 1
+        check -= timedelta(days=1)
 
     return {
         "total_solved": total_solved,
+        "problems_solved": total_solved,   # alias expected by frontend
         "easy_solved": easy_solved,
         "medium_solved": medium_solved,
         "hard_solved": hard_solved,
         "total_submissions": total_submissions,
-        "accuracy": accuracy
+        "accuracy": accuracy,              # 0-100 percentage
+        "acceptance_rate": acceptance_rate, # 0-1 ratio (frontend does * 100)
+        "streak": streak,
     }
 
 

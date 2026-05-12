@@ -256,6 +256,12 @@ export default function Navbar() {
             <Link to="/problems" className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium ${isActive('/problems') ? 'bg-[#111111] text-white' : 'text-[#555555] hover:bg-[#F5F5F5]'}`}>
               <BookOpen className="w-4 h-4" /> Problems
             </Link>
+            <Link to="/profile" className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium ${isActive('/profile') ? 'bg-[#111111] text-white' : 'text-[#555555] hover:bg-[#F5F5F5]'}`}>
+              <User className="w-4 h-4" /> My Profile
+            </Link>
+            <Link to="/leaderboard" className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium ${isActive('/leaderboard') ? 'bg-[#111111] text-white' : 'text-[#555555] hover:bg-[#F5F5F5]'}`}>
+              <Trophy className="w-4 h-4" /> Leaderboard
+            </Link>
             {user.role === 'admin' && (
               <Link to="/admin" className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium ${isActive('/admin') ? 'bg-[#111111] text-white' : 'text-[#555555] hover:bg-[#F5F5F5]'}`}>
                 <Shield className="w-4 h-4" /> Admin

@@ -86,6 +86,8 @@ export default function App() {
   };
 
   const logout = () => {
+    // Tell backend to invalidate the session and clear the cookie
+    axios.post(`${API}/api/auth/logout`, {}, { withCredentials: true }).catch(() => {});
     localStorage.removeItem('token');
     clearCache(); // wipe cached API responses so next login starts fresh
     setUser(null);

@@ -190,12 +190,21 @@ export default function SubmissionPage() {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
         {/* Back */}
-        <Link
-          to="/dashboard"
-          className="inline-flex items-center gap-1.5 text-sm text-[#888888] hover:text-[#111111] mb-6 transition-colors font-medium"
-        >
-          <ChevronLeft className="w-4 h-4" /> Back to Dashboard
-        </Link>
+        <div className="flex items-center gap-3 mb-6">
+          <Link
+            to={submission.problem_id ? `/problems/${submission.problem_id}` : '/problems'}
+            className="inline-flex items-center gap-1.5 text-sm text-[#888888] hover:text-[#111111] transition-colors font-medium"
+          >
+            <ChevronLeft className="w-4 h-4" /> Back to Problem
+          </Link>
+          <span className="text-[#DDDDDD]">·</span>
+          <Link
+            to="/dashboard"
+            className="inline-flex items-center gap-1.5 text-sm text-[#888888] hover:text-[#111111] transition-colors font-medium"
+          >
+            Dashboard
+          </Link>
+        </div>
 
         {/* Status Banner */}
         <div className={`flex items-center gap-4 p-5 rounded-2xl border mb-6 ${cfg.bg}`}>

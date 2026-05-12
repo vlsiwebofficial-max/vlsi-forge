@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth, API } from '../App';
+import { cachedGet } from '../utils/apiCache';
 import Navbar from '../components/Navbar';
 import { CheckCircle, XCircle, Zap, ArrowRight, Trophy } from 'lucide-react';
 
@@ -187,11 +188,12 @@ function ProgressBar({ value, max, color }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
   const { user } = useAuth();
-  const [stats,       setStats]       = useState(null);
-  const [heatmap,     setHeatmap]     = useState(null);
-  const [submissions, setSubmissions] = useState([]);
-  const [solvedData,  setSolvedData]  = useState(null);
-  const [loading,     setLoading]     = useState(true);
+  const [stats,        setStats]        = useState(null);
+  const [heatmap,      setHeatmap]      = useState(null);
+  const [submissions,  setSubmissions]  = useState([]);
+  const [solvedData,   setSolvedData]   = useState(null);
+  const [problemCounts, setProblemCounts] = useState({ diff: {}, domain: {} });
+  const [loading,      setLoading]      = useState(true);
 
   useEffect(() => {
     Promise.allSettled([
@@ -199,11 +201,22 @@ export default function ProfilePage() {
       axios.get(`${API}/api/stats/heatmap`,         { withCredentials: true }),
       axios.get(`${API}/api/submissions/user/me`,   { withCredentials: true }),
       axios.get(`${API}/api/stats/solved-problems`, { withCredentials: true }),
-    ]).then(([sR, hR, subR, solR]) => {
+      cachedGet(`${API}/api/problems`,              {}),
+    ]).then(([sR, hR, subR, solR, probR]) => {
       if (sR.status   === 'fulfilled') setStats(sR.value.data);
       if (hR.status   === 'fulfilled') setHeatmap(hR.value.data.days || []);
       if (subR.status === 'fulfilled') setSubmissions(subR.value.data.slice(0, 10));
       if (solR.status === 'fulfilled') setSolvedData(solR.value.data);
+      if (probR.status === 'fulfilled') {
+        const problems = probR.value.data || [];
+        const diff = {};
+        const domain = {};
+        problems.forEach(p => {
+          diff[p.difficulty]  = (diff[p.difficulty]  || 0) + 1;
+          if (p.domain) domain[p.domain] = (domain[p.domain] || 0) + 1;
+        });
+        setProblemCounts({ diff, domain });
+      }
     }).finally(() => setLoading(false));
   }, []);
 
@@ -274,9 +287,9 @@ export default function ProfilePage() {
             ) : (
               <div className="space-y-4">
                 {[
-                  { label:'Easy',   value: stats?.easy_solved   ?? 0, total: 15, color:'#16A34A', ds: DIFF_STYLE.Easy   },
-                  { label:'Medium', value: stats?.medium_solved ?? 0, total: 13, color:'#D97706', ds: DIFF_STYLE.Medium },
-                  { label:'Hard',   value: stats?.hard_solved   ?? 0, total:  5, color:'#DC2626', ds: DIFF_STYLE.Hard   },
+                  { label:'Easy',   value: stats?.easy_solved   ?? 0, total: problemCounts.diff['Easy']   || 0, color:'#16A34A', ds: DIFF_STYLE.Easy   },
+                  { label:'Medium', value: stats?.medium_solved ?? 0, total: problemCounts.diff['Medium'] || 0, color:'#D97706', ds: DIFF_STYLE.Medium },
+                  { label:'Hard',   value: stats?.hard_solved   ?? 0, total: (problemCounts.diff['Hard'] || 0) + (problemCounts.diff['Very Hard'] || 0), color:'#DC2626', ds: DIFF_STYLE.Hard   },
                 ].map(({ label, value, total, color, ds }) => (
                   <div key={label}>
                     <div className="flex items-center justify-between mb-1.5">
@@ -299,7 +312,8 @@ export default function ProfilePage() {
               <div className="space-y-3">
                 {Object.entries(DOMAIN_COLOR).map(([domain, color]) => {
                   const solved = solvedData?.domain_solved?.[domain] || 0;
-                  if (solved === 0 && !solvedData) return null;
+                  const total  = problemCounts.domain[domain] || 0;
+                  if (total === 0 && !solved) return null;
                   return (
                     <div key={domain}>
                       <div className="flex items-center justify-between mb-1.5">
@@ -307,9 +321,9 @@ export default function ProfilePage() {
                           <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }}/>
                           <span className="text-xs font-medium text-[#444444]">{domain}</span>
                         </div>
-                        <span className="text-xs font-mono text-[#AAAAAA]">{solved}</span>
+                        <span className="text-xs font-mono text-[#AAAAAA]">{solved}{total > 0 ? ` / ${total}` : ''}</span>
                       </div>
-                      <ProgressBar value={solved} max={Math.max(solved, 5)} color={color}/>
+                      <ProgressBar value={solved} max={Math.max(total, 1)} color={color}/>
                     </div>
                   );
                 })}
