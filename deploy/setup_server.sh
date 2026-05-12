@@ -1,21 +1,41 @@
 #!/bin/bash
 # =============================================================================
-# VLSI Forge — Server Setup Script
-# Run this ONCE on a fresh Ubuntu 22.04 / Debian 12 server as root or sudo user
-# Usage: sudo bash setup_server.sh
+# VLSI Forge — One-Shot VPS Setup Script
+# Tested on: Ubuntu 22.04 LTS (Hostinger KVM)
+#
+# Run as root:
+#   curl -fsSL https://raw.githubusercontent.com/vlsiwebofficial-max/vlsi-forge/main/deploy/setup_server.sh | sudo bash
+#
+# Or after uploading:
+#   sudo bash setup_server.sh
 # =============================================================================
 
-set -e  # Exit on any error
+set -euo pipefail
 
-echo "======================================"
-echo " VLSI Forge — Server Setup"
-echo "======================================"
+# ── Colour helpers ────────────────────────────────────────────────────────────
+GREEN="\e[32m"; YELLOW="\e[33m"; RED="\e[31m"; RESET="\e[0m"; BOLD="\e[1m"
+ok()   { echo -e "${GREEN}  ✓ $*${RESET}"; }
+warn() { echo -e "${YELLOW}  ⚠ $*${RESET}"; }
+err()  { echo -e "${RED}  ✗ $*${RESET}"; exit 1; }
+hdr()  { echo -e "\n${BOLD}[$1/9] $2${RESET}"; }
+
+echo -e "${BOLD}"
+echo "╔══════════════════════════════════════════╗"
+echo "║      VLSI Forge — Server Setup           ║"
+echo "║      Ubuntu 22.04 · Hostinger VPS        ║"
+echo "╚══════════════════════════════════════════╝"
+echo -e "${RESET}"
+
+GITHUB_REPO="https://github.com/vlsiwebofficial-max/vlsi-forge.git"
+APP_DIR="/opt/vlsiforge"
+APP_USER="vlsiforge"
 
 # ── 1. System packages ────────────────────────────────────────────────────────
-echo "[1/8] Installing system packages..."
-apt-get update -y
-apt-get install -y \
-    python3 python3-pip python3-venv \
+hdr 1 "Installing system packages"
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y -q
+apt-get install -y -q \
+    python3.11 python3.11-venv python3-pip \
     iverilog \
     verilator \
     nginx \
@@ -23,104 +43,119 @@ apt-get install -y \
     git \
     curl \
     ufw \
-    htop
+    htop \
+    ca-certificates
 
-echo "  ✓ iverilog $(iverilog -V 2>&1 | head -1)"
-echo "  ✓ verilator $(verilator --version 2>&1 | head -1)"
+ok "iverilog: $(iverilog -V 2>&1 | head -1)"
+ok "verilator: $(verilator --version 2>&1 | head -1)"
+ok "Python: $(python3.11 --version)"
+ok "nginx: $(nginx -v 2>&1)"
 
-# ── 2. Create app user ────────────────────────────────────────────────────────
-echo "[2/8] Creating app user..."
-if ! id "vlsiforge" &>/dev/null; then
-    useradd -m -s /bin/bash vlsiforge
-    echo "  ✓ Created user: vlsiforge"
+# ── 2. Create non-root app user ───────────────────────────────────────────────
+hdr 2 "Creating app user"
+if id "$APP_USER" &>/dev/null; then
+    warn "User '$APP_USER' already exists — skipping"
 else
-    echo "  ✓ User vlsiforge already exists"
+    useradd -m -s /bin/bash "$APP_USER"
+    ok "Created user: $APP_USER"
 fi
 
-# ── 3. Clone / copy app to server ────────────────────────────────────────────
-echo "[3/8] Setting up app directory..."
-APP_DIR="/opt/vlsiforge"
-mkdir -p "$APP_DIR"
+# ── 3. Clone repository ───────────────────────────────────────────────────────
+hdr 3 "Cloning repository from GitHub"
+if [ -d "$APP_DIR/.git" ]; then
+    warn "Repo already cloned — pulling latest"
+    git -C "$APP_DIR" pull --ff-only
+else
+    git clone "$GITHUB_REPO" "$APP_DIR"
+    ok "Cloned to $APP_DIR"
+fi
 
-# If you have a GitHub repo, replace the echo below with:
-#   git clone https://github.com/YOUR_USERNAME/vlsiforge.git "$APP_DIR"
-# Otherwise, copy your backend folder here manually via scp:
-#   scp -r ./backend user@your-server:/opt/vlsiforge/
-
-echo "  → App directory: $APP_DIR"
-echo "  → Copy your backend code here: scp -r ./backend user@YOUR_SERVER:/opt/vlsiforge/"
-
-# ── 4. Python virtual environment ────────────────────────────────────────────
-echo "[4/8] Creating Python virtualenv..."
-python3 -m venv "$APP_DIR/venv"
+# ── 4. Python virtual environment + dependencies ──────────────────────────────
+hdr 4 "Setting up Python environment"
+python3.11 -m venv "$APP_DIR/venv"
 source "$APP_DIR/venv/bin/activate"
-
-if [ -f "$APP_DIR/backend/requirements.txt" ]; then
-    pip install --upgrade pip -q
-    pip install -r "$APP_DIR/backend/requirements.txt" -q
-    echo "  ✓ Python dependencies installed"
-else
-    echo "  ⚠ No requirements.txt found at $APP_DIR/backend/requirements.txt"
-    echo "    Copy your backend files first, then re-run: pip install -r requirements.txt"
-fi
-
+pip install --upgrade pip -q
+pip install -r "$APP_DIR/backend/requirements.txt" -q
 deactivate
+ok "All Python dependencies installed"
 
 # ── 5. Environment file ───────────────────────────────────────────────────────
-echo "[5/8] Setting up environment file..."
+hdr 5 "Environment configuration"
 ENV_FILE="$APP_DIR/backend/.env"
 
 if [ ! -f "$ENV_FILE" ]; then
-    cat > "$ENV_FILE" <<'ENVEOF'
-# ── MongoDB Atlas ──────────────────────────────────────────────────────────
-# Replace with your Atlas connection string (from Atlas → Connect → Drivers)
-MONGO_URL="mongodb+srv://USERNAME:PASSWORD@cluster0.XXXXX.mongodb.net/?retryWrites=true&w=majority"
-DB_NAME="vlsiforge"
+    # Generate a random JWT secret automatically
+    JWT_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
 
-# ── Security ───────────────────────────────────────────────────────────────
-# Generate a strong secret: python3 -c "import secrets; print(secrets.token_hex(32))"
-JWT_SECRET="REPLACE_WITH_STRONG_SECRET"
+    cat > "$ENV_FILE" <<ENVEOF
+# ── MongoDB Atlas ──────────────────────────────────────────────────────────────
+# Replace with your real Atlas connection string
+MONGO_URL=mongodb+srv://vlsiforge_user:PASSWORD@cluster0.XXXXX.mongodb.net/?retryWrites=true&w=majority
+DB_NAME=vlsiforge
 
-# ── CORS ───────────────────────────────────────────────────────────────────
-# Set to your actual frontend domain (no trailing slash)
-CORS_ORIGINS="https://vlsiweb.com,https://www.vlsiweb.com"
+# ── Security ───────────────────────────────────────────────────────────────────
+JWT_SECRET=${JWT_SECRET}
+
+# ── CORS ───────────────────────────────────────────────────────────────────────
+CORS_ORIGINS=https://vlsiweb.com,https://www.vlsiweb.com
+
+# ── Optional: Anthropic API for AI hints (leave blank to disable) ──────────────
+# ANTHROPIC_API_KEY=sk-ant-...
+
+# ── Optional: Resend API for email verification ────────────────────────────────
+# RESEND_API_KEY=re_...
+# FROM_EMAIL=noreply@vlsiweb.com
 ENVEOF
     chmod 600 "$ENV_FILE"
-    echo "  ✓ Created $ENV_FILE — EDIT THIS FILE with your real values before starting!"
+    ok "Created $ENV_FILE (JWT secret auto-generated)"
+    warn "Edit MONGO_URL in $ENV_FILE before starting the service!"
 else
-    echo "  ✓ .env already exists, skipping"
+    ok ".env already exists — keeping existing file"
 fi
 
-# ── 6. Fix permissions ────────────────────────────────────────────────────────
-echo "[6/8] Setting permissions..."
-chown -R vlsiforge:vlsiforge "$APP_DIR"
-chmod -R 755 "$APP_DIR"
-chmod 600 "$APP_DIR/backend/.env"
-echo "  ✓ Permissions set"
+# ── 6. Nginx configuration ────────────────────────────────────────────────────
+hdr 6 "Configuring Nginx"
+cp "$APP_DIR/deploy/vlsiforge-nginx.conf" /etc/nginx/sites-available/vlsiforge
 
-# ── 7. Firewall ───────────────────────────────────────────────────────────────
-echo "[7/8] Configuring firewall..."
-ufw --force enable
-ufw allow OpenSSH
-ufw allow 'Nginx Full'
-echo "  ✓ UFW configured (SSH + HTTP/HTTPS open)"
+# Enable by creating symlink (safe if already exists)
+ln -sf /etc/nginx/sites-available/vlsiforge /etc/nginx/sites-enabled/vlsiforge
 
-# ── 8. Systemd service ────────────────────────────────────────────────────────
-echo "[8/8] Installing systemd service..."
+# Disable the default site
+rm -f /etc/nginx/sites-enabled/default
+
+nginx -t && ok "Nginx configuration valid"
+systemctl enable nginx
+systemctl restart nginx
+ok "Nginx running"
+
+# ── 7. Systemd service ────────────────────────────────────────────────────────
+hdr 7 "Installing systemd service"
 cat > /etc/systemd/system/vlsiforge.service <<'SERVICEEOF'
 [Unit]
 Description=VLSI Forge FastAPI Backend
 After=network.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=vlsiforge
+Group=vlsiforge
 WorkingDirectory=/opt/vlsiforge/backend
-Environment="PATH=/opt/vlsiforge/venv/bin"
+Environment="PATH=/opt/vlsiforge/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 EnvironmentFile=/opt/vlsiforge/backend/.env
-ExecStart=/opt/vlsiforge/venv/bin/uvicorn server:app --host 127.0.0.1 --port 8001 --workers 2
+
+ExecStart=/opt/vlsiforge/venv/bin/uvicorn server:app \
+    --host 127.0.0.1 \
+    --port 8001 \
+    --workers 2 \
+    --log-level info
+
 Restart=always
 RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+# Logging
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=vlsiforge
@@ -137,37 +172,53 @@ SERVICEEOF
 
 systemctl daemon-reload
 systemctl enable vlsiforge
-echo "  ✓ Systemd service installed and enabled"
+ok "Service 'vlsiforge' installed and enabled (auto-starts on reboot)"
 
+# ── 8. Fix file permissions ───────────────────────────────────────────────────
+hdr 8 "Setting file permissions"
+chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+chmod 600 "$APP_DIR/backend/.env"
+ok "Ownership: $APP_USER, .env mode: 600"
+
+# ── 9. Firewall ───────────────────────────────────────────────────────────────
+hdr 9 "Configuring firewall (UFW)"
+ufw --force enable
+ufw allow OpenSSH
+ufw allow 'Nginx Full'
+ufw status verbose
+ok "Firewall active (SSH + HTTP/HTTPS allowed)"
+
+# ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
-echo "======================================"
-echo " Setup complete!"
-echo "======================================"
-echo ""
-echo "NEXT STEPS:"
-echo ""
-echo "1. Copy your backend files to the server:"
-echo "   scp -r ./backend/* user@YOUR_SERVER:/opt/vlsiforge/backend/"
-echo ""
-echo "2. Edit the .env file with your real values:"
+echo -e "${BOLD}${GREEN}"
+echo "╔══════════════════════════════════════════════════════╗"
+echo "║   Setup complete!  Do these 3 things to go live:    ║"
+echo "╚══════════════════════════════════════════════════════╝"
+echo -e "${RESET}"
+
+SERVER_IP=$(curl -s https://api.ipify.org 2>/dev/null || echo "YOUR_SERVER_IP")
+
+echo -e "${BOLD}STEP A — Edit your environment file:${RESET}"
 echo "   sudo nano /opt/vlsiforge/backend/.env"
-echo "   - MONGO_URL  → your Atlas connection string"
-echo "   - JWT_SECRET → run: python3 -c \"import secrets; print(secrets.token_hex(32))\""
-echo "   - CORS_ORIGINS → https://vlsiweb.com,https://www.vlsiweb.com"
+echo "   → Set MONGO_URL to your Atlas connection string"
 echo ""
-echo "3. Copy the Nginx config:"
-echo "   sudo cp vlsiforge-nginx.conf /etc/nginx/sites-available/vlsiforge"
-echo "   sudo ln -s /etc/nginx/sites-available/vlsiforge /etc/nginx/sites-enabled/"
-echo "   sudo nginx -t && sudo systemctl reload nginx"
-echo ""
-echo "4. Get SSL certificate:"
-echo "   sudo certbot --nginx -d api.vlsiweb.com"
-echo ""
-echo "5. Start the backend:"
+echo -e "${BOLD}STEP B — Start the backend:${RESET}"
 echo "   sudo systemctl start vlsiforge"
-echo "   sudo systemctl status vlsiforge"
+echo "   sudo journalctl -u vlsiforge -f   # watch logs"
 echo ""
-echo "6. Seed the database:"
+echo -e "${BOLD}STEP C — Get SSL certificate (after DNS is pointed here):${RESET}"
+echo "   Your server IP: ${GREEN}${SERVER_IP}${RESET}"
+echo "   In Hostinger DNS, add:  A record  api  →  ${SERVER_IP}"
+echo "   Then run:"
+echo "   sudo certbot --nginx -d api.vlsiweb.com --non-interactive --agree-tos -m your@email.com"
+echo ""
+echo -e "${BOLD}STEP D — Seed the database:${RESET}"
 echo "   cd /opt/vlsiforge && source venv/bin/activate"
-echo "   python3 scripts/seed_database.py"
+echo "   export \$(cat backend/.env | grep -v '^#' | xargs)"
+echo "   python3 deploy/seed_atlas.py"
 echo ""
+echo -e "${BOLD}STEP E — Test everything:${RESET}"
+echo "   curl http://localhost:8001/health"
+echo "   curl https://api.vlsiweb.com/health   # after SSL"
+echo ""
+echo -e "${GREEN}Good luck! — VLSI Forge${RESET}"
